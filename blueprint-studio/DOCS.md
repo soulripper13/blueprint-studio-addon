@@ -34,3 +34,10 @@ Blueprint Studio uses Home Assistant's secure **Ingress** system:
 - No open ports are required on your router or local network.
 - Authentication is handled directly by Home Assistant.
 - Operates within an isolated container while safely managing `/config`.
+
+## Support the Project ❤️
+
+If you enjoy Blueprint Studio and would like to support ongoing maintenance and new features:
+- **Ko-fi**: [https://ko-fi.com/soulripper13](https://ko-fi.com/soulripper13)
+- **PayPal**: [https://paypal.me/SKatoaroo](https://paypal.me/SKatoaroo)
+- **GitHub Sponsors**: [https://github.com/sponsors/soulripper13](https://github.com/sponsors/soulripper13)
