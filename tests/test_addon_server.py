@@ -71,3 +71,13 @@ class TestAddonServer(AioHTTPTestCase):
         self.assertEqual(read_resp.status, 200)
         read_data = await read_resp.json()
         self.assertIn("key: value", read_data.get("content", ""))
+
+        # 4. Read file with /config/ prefix
+        read_config_resp = await self.client.get("/api?action=read_file&path=/config/test.yaml")
+        self.assertEqual(read_config_resp.status, 200)
+        self.assertIn("key: value", (await read_config_resp.json()).get("content", ""))
+
+        # 5. Read file with /homeassistant/ prefix
+        read_ha_resp = await self.client.get("/api?action=read_file&path=/homeassistant/test.yaml")
+        self.assertEqual(read_ha_resp.status, 200)
+        self.assertIn("key: value", (await read_ha_resp.json()).get("content", ""))

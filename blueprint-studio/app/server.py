@@ -180,7 +180,13 @@ async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Blueprint Studio Standalone Server")
     parser.add_argument("--port", type=int, default=8099, help="Port to listen on")
-    parser.add_argument("--config-dir", type=str, default="/config", help="Home Assistant config directory")
+    default_dir = "/homeassistant" if os.path.isdir("/homeassistant") else "/config"
+    parser.add_argument(
+        "--config-dir",
+        type=str,
+        default=default_dir,
+        help="Home Assistant config directory",
+    )
     parser.add_argument("--data-dir", type=str, default="/data", help="Add-on persisted data directory")
     args = parser.parse_args()
 
@@ -190,6 +196,8 @@ def main() -> None:
     if not config_path.is_dir():
         _LOGGER.warning("Config directory %s does not exist, creating it", config_path)
         config_path.mkdir(parents=True, exist_ok=True)
+
+    os.environ["HOME"] = str(config_path)
 
     _LOGGER.info("Starting Blueprint Studio Add-on v%s on port %d", VERSION, args.port)
     _LOGGER.info("Configuration directory: %s", config_path)

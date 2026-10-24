@@ -20,6 +20,18 @@ def json_message(message: str, success: bool = False, status_code: int = 200) ->
     """Return a JSON message response."""
     return web.json_response({"success": success, "message": message}, status=status_code)
 
+def normalize_rel_path(path: str) -> str:
+    """Normalize relative path by stripping redundant base folder prefixes."""
+    clean = str(path).strip().lstrip("/")
+    if clean in ("config", "homeassistant"):
+        return ""
+    if clean.startswith("config/"):
+        return clean[len("config/"):]
+    if clean.startswith("homeassistant/"):
+        return clean[len("homeassistant/"):]
+    return clean
+
+
 def is_path_safe(config_dir: Path, path: str) -> bool:
     """Check if the path is safe (no path traversal).
 
@@ -31,7 +43,8 @@ def is_path_safe(config_dir: Path, path: str) -> bool:
         True if the path is safe to access, False otherwise
     """
     try:
-        full_path = (config_dir / path.lstrip("/")).resolve()
+        clean = normalize_rel_path(path)
+        full_path = (config_dir / clean).resolve()
         # Must be within config_dir
         return full_path.is_relative_to(config_dir)
     except (ValueError, OSError):
@@ -54,7 +67,8 @@ def get_safe_path(config_dir: Path, path: str) -> Path | None:
         )
         return None
 
-    full_path = (config_dir / path.lstrip("/")).resolve()
+    clean = normalize_rel_path(path)
+    full_path = (config_dir / clean).resolve()
     _LOGGER.debug("Resolved safe path: %s -> %s", path, full_path)
     return full_path
 

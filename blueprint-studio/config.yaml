@@ -1,6 +1,6 @@
 name: "Blueprint Studio"
 description: "Powerful YAML editor, Blueprint creator, Git workspace, and AI assistant for Home Assistant."
-version: "3.0.3"
+version: "3.0.4"
 slug: "blueprint-studio"
 init: false
 arch:
