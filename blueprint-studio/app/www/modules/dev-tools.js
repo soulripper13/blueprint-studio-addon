@@ -749,7 +749,22 @@ function _initStates(panel) {
   const refreshBtn = pane.querySelector('.bdt-states-refresh');
   let allEntities = [];
 
-  async function load(observable = false) {
+  function getParentHassStates() {
+    try {
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        const haElem = window.parent.document?.querySelector('home-assistant');
+        const hass = haElem?.hass;
+        if (hass && hass.states && Object.keys(hass.states).length > 0) {
+          return hass.states;
+        }
+      }
+    } catch (_e) {
+      // Cross-origin restriction
+    }
+    return null;
+  }
+
+  async function load(observable = false, force = false) {
     const operation = observable ? startOperationFeedback({
       label: t('dev_tools.states_refresh'),
       icon: 'refresh',
@@ -768,10 +783,54 @@ function _initStates(panel) {
     try {
       const data = await fetchWithAuth(API_BASE, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_entities', with_attributes: true }),
+        body: JSON.stringify({ action: 'get_entities', with_attributes: true, force_refresh: force }),
       });
       if (data?.success === false) throw new Error(responseFailure(data, 'State loading was rejected'));
       allEntities = data.entities || [];
+
+      // Overlay live states from parent Home Assistant interface if available
+      const parentStates = getParentHassStates();
+      if (parentStates) {
+        const parentMap = new Map(Object.entries(parentStates));
+        if (allEntities.length > 0) {
+          allEntities = allEntities.map(e => {
+            const live = parentMap.get(e.entity_id);
+            if (live) {
+              parentMap.delete(e.entity_id);
+              const mergedAttrs = { ...(e.attributes || {}), ...(live.attributes || {}) };
+              return {
+                ...e,
+                state: (live.state !== undefined && live.state !== 'unknown') ? live.state : e.state,
+                friendly_name: live.attributes?.friendly_name || e.friendly_name,
+                device_class: live.attributes?.device_class || e.device_class || null,
+                icon: live.attributes?.icon || e.icon,
+                attributes: mergedAttrs,
+              };
+            }
+            return e;
+          });
+          for (const [eid, live] of parentMap.entries()) {
+            allEntities.push({
+              entity_id: eid,
+              state: live.state,
+              friendly_name: live.attributes?.friendly_name || eid,
+              icon: live.attributes?.icon,
+              device_class: live.attributes?.device_class || null,
+              attributes: live.attributes || {},
+            });
+          }
+        } else {
+          allEntities = Object.entries(parentStates).map(([eid, live]) => ({
+            entity_id: eid,
+            state: live.state,
+            friendly_name: live.attributes?.friendly_name || eid,
+            icon: live.attributes?.icon,
+            device_class: live.attributes?.device_class || null,
+            attributes: live.attributes || {},
+          }));
+        }
+      }
+
       operation?.finish(tp('dev_tools.states_loaded', allEntities.length));
       _recordRawResult(panel, 'States', `${allEntities.length} entities loaded`, data, { open: false });
       const domains = [...new Set(allEntities.map(e => e.entity_id.split('.')[0]))].sort();
@@ -798,11 +857,11 @@ function _initStates(panel) {
     tbody.innerHTML = visible.map(e => {
       const cls = e.state === 'on' ? 'bdt-state-on' : e.state === 'off' ? 'bdt-state-off' : 'bdt-state-other';
       const attrs = e.attributes || {};
-      // Show a short summary: up to 2 key attributes excluding friendly_name/icon
+      // Show a short summary: up to 3 key attributes excluding friendly_name/icon
       const skipSummary = new Set(['friendly_name', 'icon', 'entity_picture', 'supported_features', 'supported_color_modes']);
       const summary = Object.entries(attrs)
-        .filter(([k]) => !skipSummary.has(k))
-        .slice(0, 2)
+        .filter(([k, v]) => !skipSummary.has(k) && v !== null && v !== undefined && v !== '')
+        .slice(0, 3)
         .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`)
         .join(' · ');
       return `<tr class="bdt-state-row" title="${_esc(e.entity_id)}">
@@ -849,7 +908,7 @@ function _initStates(panel) {
 
   searchInput.addEventListener('input', render);
   domainFilter.addEventListener('change', render);
-  refreshBtn.addEventListener('click', () => { allEntities = []; load(true); });
+  refreshBtn.addEventListener('click', () => { allEntities = []; load(true, true); });
 
   const observer = new MutationObserver(() => {
     if (pane.classList.contains('active') && allEntities.length === 0) load(false);

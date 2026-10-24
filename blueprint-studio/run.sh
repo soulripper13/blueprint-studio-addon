@@ -3,6 +3,21 @@ set -e
 
 echo "[INFO] Starting Blueprint Studio Supervisor Add-on..."
 
+# 0. Import container environment variables if provided by S6 overlay / Supervisor
+for env_dir in /run/s6/container_environment /var/run/s6/container_environment /run/s6-rc/container_environment /var/run/s6-rc/container_environment; do
+    if [ -d "$env_dir" ]; then
+        for f in "$env_dir"/*; do
+            if [ -f "$f" ]; then
+                varname=$(basename "$f")
+                if [ -z "${!varname}" ]; then
+                    export "$varname"="$(cat "$f")"
+                fi
+            fi
+        done
+        break
+    fi
+done
+
 CONFIG_DIR=""
 
 # 1. Check if user configured a custom workspace directory via options.json

@@ -237,15 +237,25 @@ async def get_entities(hass, data):
         ensure_domains – Domains whose entities are *always* included before the cap,
                          even when 'domains' is unset (mixed restricted/unrestricted case).
         query         – Text filter on entity_id / friendly_name.
+        with_attributes – If true, include all state attributes.
     """
     query = data.get("query", "").lower()
     domains = data.get("domains")  # e.g. ["camera", "light"]
     device_classes = data.get("device_classes")  # e.g. ["motion", "door"]
     ensure_domains = data.get("ensure_domains")  # e.g. ["camera", "device_tracker"]
+    with_attributes = bool(data.get("with_attributes"))
 
-    # Only use the cache for unfiltered requests (the common page-load case).
-    # Filtered requests (AI autocomplete, entity pickers) are always fresh.
-    use_cache = not query and not domains and not device_classes and not ensure_domains
+    # Refresh states from Supervisor API if supported
+    if hasattr(hass.states, "async_update_states"):
+        force = bool(data.get("force_refresh") or with_attributes)
+        try:
+            await hass.states.async_update_states(force=force)
+        except Exception as err:
+            _LOGGER.debug("Failed updating states before get_entities: %s", err)
+
+    # Only use the cache for unfiltered requests without attributes (common page-load autocomplete case).
+    # Filtered requests or requests requiring attributes (e.g. Developer Tools) are always fresh.
+    use_cache = not query and not domains and not device_classes and not ensure_domains and not with_attributes
     cache_key = "entities_all"
     if use_cache:
         cached = _HassCache.get(cache_key)
@@ -635,7 +645,14 @@ async def render_template(hass, data):
         from homeassistant.helpers import template as tpl
 
         tmpl = tpl.Template(template_str, hass)
-        result = await hass.async_add_executor_job(tmpl.async_render)
+        if hasattr(tmpl, "async_render"):
+            import inspect
+            if inspect.iscoroutinefunction(tmpl.async_render):
+                result = await tmpl.async_render()
+            else:
+                result = await hass.async_add_executor_job(tmpl.async_render)
+        else:
+            result = await hass.async_add_executor_job(tmpl.render)
         return json_response({"success": True, "result": str(result)})
     except Exception as e:
         return json_response({"success": False, "error": str(e)})

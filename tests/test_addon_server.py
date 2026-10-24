@@ -92,3 +92,57 @@ class TestAddonServer(AioHTTPTestCase):
         self.assertEqual(meta_resp.status, 200)
         meta_data = await meta_resp.json()
         self.assertTrue(any(e["entity_id"] == "sensor.living_room_temperature" for e in meta_data.get("entities", [])))
+
+    @unittest_run_loop
+    async def test_get_entities_with_attributes_and_restore_state(self):
+        storage_dir = self.tmp_config / ".storage"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        # 1. Populate restore_state with live attributes
+        (storage_dir / "core.restore_state").write_text(
+            '{"data": [{"state": {"entity_id": "sensor.kitchen_temperature", "state": "23.5", "attributes": {"friendly_name": "Kitchen Temperature", "device_class": "temperature", "unit_of_measurement": "°C"}}}]}'
+        )
+        # 2. Populate entity_registry
+        (storage_dir / "core.entity_registry").write_text(
+            '{"data": {"entities": [{"entity_id": "sensor.kitchen_temperature", "name": "Kitchen Temperature", "device_class": "temperature"}, {"entity_id": "light.kitchen", "name": "Kitchen Light"}]}}'
+        )
+
+        resp = await self.client.post(
+            "/api",
+            json={"action": "get_entities", "with_attributes": True, "force_refresh": True}
+        )
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        entities = data.get("entities", [])
+        sensor = next((e for e in entities if e["entity_id"] == "sensor.kitchen_temperature"), None)
+        self.assertIsNotNone(sensor)
+        self.assertEqual(sensor["state"], "23.5")
+        self.assertEqual(sensor["device_class"], "temperature")
+        self.assertIn("attributes", sensor)
+        self.assertEqual(sensor["attributes"].get("unit_of_measurement"), "°C")
+
+    @unittest_run_loop
+    async def test_render_template(self):
+        resp = await self.client.post(
+            "/api",
+            json={"action": "render_template", "template": "Result: {{ 5 + 7 }}"}
+        )
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        self.assertTrue(data.get("success"))
+        self.assertEqual(data.get("result"), "Result: 12")
+
+    @unittest_run_loop
+    async def test_call_service_target_handling(self):
+        resp = await self.client.post(
+            "/api",
+            json={
+                "action": "call_service",
+                "domain": "light",
+                "service": "turn_on",
+                "target": {"entity_id": "light.kitchen"},
+                "service_data": {"brightness": 255}
+            }
+        )
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        self.assertTrue(data.get("success"))

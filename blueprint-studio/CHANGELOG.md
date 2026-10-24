@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.8
+
+- Fix entity states and attributes in Developer Tools:
+  - Added live state update before `get_entities` queries (`hass.states.async_update_states`).
+  - Added S6 container environment token loader (`/run/s6/container_environment/SUPERVISOR_TOKEN`) to guarantee authenticated access to Supervisor Core API.
+  - Added dual fallback reading `.storage/core.restore_state` and `.storage/core.entity_registry` so entities always retain their last known states and attributes even when offline.
+  - Added live frontend state and attribute merging with parent Home Assistant UI (`window.parent.document.querySelector("home-assistant").hass.states`).
+  - Fixed Developer Tools template rendering with Jinja2 engine and Supervisor `/api/template` proxy.
+  - Fixed action/service runner keyword argument handling (`target`, `blocking`, `return_response`).
+
 ## 3.0.7
 
 - Fix Home Assistant entity and action autocomplete in Add-on:

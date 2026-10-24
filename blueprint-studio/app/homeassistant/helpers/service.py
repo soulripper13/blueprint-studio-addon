@@ -6,12 +6,14 @@ import logging
 import os
 from typing import Any
 
+from homeassistant.core import get_supervisor_token
+
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_get_all_descriptions(hass: Any) -> dict[str, Any]:
     """Return all service descriptions using Supervisor Core API or fallback."""
-    token = os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN")
+    token = get_supervisor_token()
     if token:
         try:
             import aiohttp
