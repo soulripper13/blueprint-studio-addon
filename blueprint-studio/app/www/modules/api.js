@@ -1,0 +1,485 @@
+/** API.JS | Purpose: * Provides the core API communication layer for Blueprint Studio. Handles */
+import { state, elements, gitState, giteaState } from './state.js';
+import { API_BASE, STREAM_BASE } from './constants.js';
+import { eventBus } from './event-bus.js';
+import { t } from './translations.js';
+import { 
+  showToast, 
+  showConfirmDialog 
+} from './ui.js';
+import { saveSettings } from './settings.js';
+import { getActiveOperationSummary, startOperationFeedback } from './feedback-service.js';
+
+// Import PWA auth - will be available after main.js loads it
+let pwaAuth = null;
+if (window.pwaAuth) {
+  pwaAuth = window.pwaAuth;
+} else {
+  // Wait for pwaAuth to be available
+  setTimeout(() => {
+    pwaAuth = window.pwaAuth;
+  }, 100);
+}
+
+export async function fetchWithAuth(url, options = {}) {
+  let headers = { ...options.headers };
+  let token = null;
+  let isHassEnvironment = false;
+
+  // Try Home Assistant auth first (when in iframe)
+  try {
+    if (window.parent && window.parent.hassConnection) {
+      isHassEnvironment = true;
+      const conn = await window.parent.hassConnection;
+      if (conn && conn.auth) {
+          if (conn.auth.expired) {
+              await conn.auth.refreshAccessToken();
+          }
+          token = conn.auth.accessToken;
+      }
+    }
+  } catch (e) {
+    console.error("❌ Auth Error:", e);
+    if (isHassEnvironment) {
+        console.warn("HA auth failed, trying PWA auth...");
+    }
+  }
+
+  // Fallback to PWA auth if HA auth not available
+  if (!token && window.pwaAuth && window.pwaAuth.isAuthenticated()) {
+    const pwaToken = await window.pwaAuth.getToken();
+    if (pwaToken) {
+      token = pwaToken;
+    }
+  }
+
+  if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  let response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: "same-origin",
+  });
+
+  // Try to refresh token on 401
+  if (response.status === 401) {
+      try {
+          // Try HA token refresh first
+          if (window.parent && window.parent.hassConnection) {
+              const conn = await window.parent.hassConnection;
+              if (conn && conn.auth) {
+                  await conn.auth.refreshAccessToken();
+                  token = conn.auth.accessToken;
+                  if (token) {
+                      headers["Authorization"] = `Bearer ${token}`;
+                      response = await fetch(url, {
+                          ...options,
+                          headers,
+                          credentials: "same-origin",
+                      });
+                  }
+              }
+          }
+
+          // If still 401 and we have PWA auth, try refreshing the token
+          if (response.status === 401 && window.pwaAuth && window.pwaAuth.isStandalone()) {
+            const newToken = await window.pwaAuth.refreshAccessToken();
+            if (newToken) {
+              headers["Authorization"] = `Bearer ${newToken}`;
+              response = await fetch(url, {
+                ...options,
+                headers,
+                credentials: "same-origin",
+              });
+            }
+            // If still 401 after refresh, session is gone
+            if (response.status === 401) {
+              window.pwaAuth._clearTokens();
+              throw new Error("Session expired. Please login again.");
+            }
+          }
+      } catch (e) {
+          console.error("❌ Failed to refresh token:", e);
+          throw e;
+      }
+  }
+
+  if (!response.ok) {
+    if (response.status === 409) {
+        try {
+            const result = await response.json();
+            return { ...result, status: 409, httpStatus: 409 };
+        } catch (e) {
+            return { success: false, message: "Conflict", status: 409, httpStatus: 409 };
+        }
+    }
+
+    let errorMessage = `HTTP ${response.status}`;
+    try {
+      const error = await response.json();
+      errorMessage = error.message || errorMessage;
+    } catch (e) {}
+    throw new Error(errorMessage);
+  }
+
+  const result = await response.json();
+  if (Array.isArray(result)) return result;
+  return {
+    ...result,
+    status: result.status ?? response.status,
+    httpStatus: response.status,
+  };
+}
+
+/**
+ * Gets authentication token for direct WebSocket or API usage
+ */
+export async function getAuthToken() {
+    try {
+      if (window.parent) {
+        let auth = null;
+        if (window.parent.hassConnection) {
+            const result = await window.parent.hassConnection;
+            auth = result.auth || (result.accessToken ? result : null);
+        } else if (window.parent.hass && window.parent.hass.auth) {
+            auth = window.parent.hass.auth;
+        }
+        
+        if (auth) {
+            if (auth.expired) {
+                await auth.refreshAccessToken();
+            }
+            return auth.accessToken;
+        }
+      }
+      
+      // Fallback to PWA token
+      if (window.pwaAuth && window.pwaAuth.isAuthenticated()) {
+          return await window.pwaAuth.getToken();
+      }
+    } catch (e) {
+      console.error("Failed to get auth token", e);
+    }
+    return null;
+}
+
+// Module-level state to avoid duplicate ready listeners across retries
+let _wsConn = null;
+let _wsUnsubscribe = null;
+
+function _parentPath(path) {
+  if (!path) return "";
+  const clean = path.endsWith("/") ? path.slice(0, -1) : path;
+  const index = clean.lastIndexOf("/");
+  return index > 0 ? clean.slice(0, index) : "";
+}
+
+function _looksLikeFile(path) {
+  const name = (path || "").split("/").pop() || "";
+  return name.includes(".");
+}
+
+function _closeDeletedTabs(path, isFolder) {
+  const matches = (tab) => tab.path === path || (isFolder && tab.path.startsWith(path + "/"));
+  const activeDeleted = state.activeTab && matches(state.activeTab);
+  state.openTabs = state.openTabs.filter(tab => !matches(tab));
+
+  if (activeDeleted) {
+    state.activeTab = state.openTabs[0] || null;
+    if (state.activeTab && state.editor && !state.activeTab.isBinary) {
+      state.editor.setValue(state.activeTab.content || "");
+    } else if (state.editor) {
+      state.editor.setValue("");
+    }
+  }
+}
+
+async function _syncOpenTabMtime(path) {
+  const tab = state.openTabs.find(item => item.path === path);
+  if (!tab || path.includes("://")) return;
+  try {
+    const response = await fetchWithAuth(`${API_BASE}?action=get_file_stat&path=${encodeURIComponent(path)}&_t=${Date.now()}`);
+    if (response?.success && response.mtime) {
+      tab.mtime = response.mtime;
+    }
+  } catch (_) {}
+}
+
+async function _refreshPath(path, action) {
+  if (!path) return;
+  const isFile = _looksLikeFile(path);
+  const parent = isFile ? _parentPath(path) : path;
+  const { loadDirectory, renderFileTree } = await import('./file-tree.js');
+
+  state.loadedDirectories.delete(parent);
+  if (action === "delete" || action === "rename" || action === "create_folder" || action === "delete_folder") {
+    state.loadedDirectories.delete(path);
+    state.expandedFolders.delete(path);
+  }
+  if (action === "delete" || action === "delete_folder") {
+    _closeDeletedTabs(path, !isFile);
+    if (!isFile && state.currentNavigationPath.startsWith(path)) {
+      state.currentNavigationPath = _parentPath(path);
+      state.navigationHistory = state.navigationHistory.filter(item => !item.startsWith(path));
+    }
+  } else if (isFile) {
+    await _syncOpenTabMtime(path);
+  }
+
+  const reloadPath = action === "delete_folder" || action === "create_folder" || (!isFile && action !== "navigate")
+    ? _parentPath(path)
+    : parent;
+
+  state.loadedDirectories.delete(reloadPath);
+
+  if (state.currentNavigationPath === reloadPath || state.currentNavigationPath === path || state.expandedFolders.has(reloadPath)) {
+    await loadDirectory(reloadPath);
+  } else {
+    renderFileTree();
+  }
+
+  eventBus.emit('ui:refresh-tree');
+  eventBus.emit('ui:refresh-tabs');
+  eventBus.emit('ui:refresh-recent-files');
+  eventBus.emit('git:status-check', { fetch: false, silent: true });
+}
+
+async function _subscribeToUpdates(conn, retries = 0) {
+  // Clean up any previous subscription before re-subscribing
+  if (_wsUnsubscribe) {
+    try { _wsUnsubscribe(); } catch (e) {}
+    _wsUnsubscribe = null;
+  }
+
+  try {
+    _wsUnsubscribe = await conn.subscribeMessage(
+      async (event) => {
+        if (event && event.action === "ai_edit") {
+          try {
+            const { showAiDiffModal } = await import('./git-diff.js');
+            await showAiDiffModal(event.path, event.old_content || "", event.new_content || "");
+            await _refreshPath(event.path, event.action);
+          } catch (e) {
+            console.error('[BPS-ws] ai_edit error:', e);
+          }
+          return;
+        }
+        if (event && event.action === "navigate" && event.path) {
+          try {
+            const { revealAndOpenFile } = await import('./file-nav-helper.js');
+            await revealAndOpenFile(event.path, 'tool');
+            await _refreshPath(event.path, event.action);
+          } catch (e) {
+            console.error('[BPS-ws] navigate error:', e);
+          }
+          return;
+        }
+        if (state._wsUpdateTimer) clearTimeout(state._wsUpdateTimer);
+        state._wsUpdateTimer = setTimeout(() => {
+          if (event?.path) {
+            _refreshPath(event.path, event.action).catch((e) => console.warn('[BPS-ws] refresh error:', e));
+            return;
+          }
+          eventBus.emit('file:check-updates');
+          eventBus.emit('git:status-check', { fetch: false, silent: true });
+        }, 80);
+
+        if (event && ["create", "delete", "rename", "create_folder", "upload", "upload_folder", "external_change"].includes(event.action)) {
+          eventBus.emit('ui:reload-files', { force: event.action === "external_change" });
+        }
+      },
+      { type: "blueprint_studio/subscribe_updates" }
+    );
+  } catch (subError) {
+    // Integration may still be loading — retry a few times
+    if (subError.code === 'unknown_command' && retries < 5) {
+      console.warn(`Blueprint Studio: Backend not ready yet (retry ${retries + 1}/5)...`);
+      setTimeout(() => _subscribeToUpdates(conn, retries + 1), 2000);
+      return;
+    }
+    throw subError;
+  }
+}
+
+/**
+ * Initialize WebSocket subscription for real-time updates.
+ * Re-subscribes automatically whenever the HA connection reconnects.
+ */
+export async function initWebSocketSubscription() {
+  try {
+    if (window.parent && window.parent.hassConnection) {
+      const result = await window.parent.hassConnection;
+      const conn = result.conn || (typeof result.subscribeMessage === 'function' ? result : null);
+
+      if (!conn || typeof conn.subscribeMessage !== 'function') {
+        throw new Error("WebSocket connection not found");
+      }
+
+      // Register the ready listener only once per connection object.
+      // On reconnect HA fires "ready" — we clean up the dead subscription
+      // and create a fresh one so updates resume without a page reload.
+      if (_wsConn !== conn) {
+        _wsConn = conn;
+        conn.addEventListener("ready", () => _subscribeToUpdates(conn));
+      }
+
+      await _subscribeToUpdates(conn);
+    } else {
+      eventBus.emit('polling:start');
+    }
+  } catch (e) {
+    console.error("Blueprint Studio: WebSocket subscription failed", e);
+    eventBus.emit('polling:start');
+  }
+}
+
+/**
+ * Builds a serve_file URL for streaming media/downloads.
+ * @param {string} path - Relative file path
+ * @returns {string} URL string (without auth token)
+ */
+export function serveFileUrl(path) {
+  return `${STREAM_BASE}?action=serve_file&path=${encodeURIComponent(path)}&_t=${Date.now()}`;
+}
+
+/**
+ * Requests a short-lived, single-use ticket and appends it to a stream URL.
+ * The authenticated API call carries the HA token only in its header.
+ * @param {string} url - The URL to authenticate
+ * @returns {Promise<string>} URL with token appended
+ */
+export async function urlWithTicket(url) {
+  const parsed = new URL(url, window.location.origin);
+  const body = { action: "issue_connection_ticket", ticket_action: parsed.searchParams.get("action") };
+  for (const key of ["path", "progress_id", "stream_id", "query", "case_sensitive", "use_regex", "match_word", "include", "exclude"]) {
+    if (parsed.searchParams.has(key)) body[key] = parsed.searchParams.get(key);
+  }
+  const result = await fetchWithAuth(API_BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!result?.ticket) throw new Error("Failed to authorize stream");
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}ticket=${encodeURIComponent(result.ticket)}`;
+}
+
+export async function issueConnectionTicket(ticketAction, scope = {}) {
+  const result = await fetchWithAuth(API_BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "issue_connection_ticket", ticket_action: ticketAction, ...scope }),
+  });
+  if (!result?.ticket) throw new Error("Failed to authorize connection");
+  return result.ticket;
+}
+
+/**
+ * Builds an authenticated serve_file download URL with Content-Disposition: attachment.
+ * @param {string} path - Relative file path
+ * @returns {Promise<string>} Authenticated URL for download
+ */
+export async function downloadFileUrl(path) {
+  return await urlWithTicket(serveFileUrl(path));
+}
+
+/**
+ * Builds an authenticated download_folder URL for streaming ZIP downloads.
+ * @param {string} path - Relative folder path
+ * @returns {Promise<string>} Authenticated URL for folder ZIP download
+ */
+export async function downloadFolderUrl(path, progressId = "") {
+  const progressParam = progressId ? `&progress_id=${encodeURIComponent(progressId)}` : "";
+  return await urlWithTicket(`${STREAM_BASE}?action=download_folder&path=${encodeURIComponent(path)}${progressParam}&_t=${Date.now()}`);
+}
+
+/**
+ * RESTARTS HOME ASSISTANT
+ */
+export async function restartHomeAssistant() {
+    const unsavedTabs = state.openTabs.filter(tab => tab.modified);
+    const activeOperations = getActiveOperationSummary();
+    const unsavedList = unsavedTabs.length
+        ? `<div class="instance-operation-impact"><strong>${unsavedTabs.length} unsaved file${unsavedTabs.length === 1 ? "" : "s"}</strong><ul>${unsavedTabs.map(tab => `<li>${escapeDialogText(tab.path || tab.name || "Untitled")}</li>`).join("")}</ul></div>`
+        : '<div class="instance-operation-impact is-clear"><strong>No unsaved files</strong></div>';
+    const operationList = activeOperations.length
+        ? `<div class="instance-operation-impact"><strong>${activeOperations.length} active operation${activeOperations.length === 1 ? "" : "s"}</strong><ul>${activeOperations.map(operation => `<li>${escapeDialogText([operation.label, operation.scope, operation.target].filter(Boolean).join(" · "))}</li>`).join("")}</ul></div>`
+        : '<div class="instance-operation-impact is-clear"><strong>No active operations</strong></div>';
+    const confirmed = await showConfirmDialog({
+        title: t("modal.restart_ha_title"),
+        message: `<div class="operation-location is-remote"><span class="ui-icon material-icons" aria-hidden="true">dns</span><span><strong>Home Assistant instance</strong><small>Instance-wide restart</small></span></div><p>${escapeDialogText(t("modal.restart_ha_message"))}</p><div class="instance-operation-impact-list">${unsavedList}${operationList}</div><p>Terminal sessions and in-progress work may disconnect during the restart.</p>`,
+        confirmText: t("modal.restart_ha_confirm"),
+        cancelText: t("modal.cancel"),
+        isDanger: true
+    });
+
+    if (!confirmed) return false;
+
+    const operation = startOperationFeedback({
+        label: t('ha_restart.label'),
+        icon: "restart_alt",
+        message: t('ha_restart.saving_state'),
+        scope: t('ha_restart.instance'),
+        target: t('ha_restart.target'),
+        retry: restartHomeAssistant,
+        openLabel: t('dev_tools.title'),
+        openIcon: "construction",
+        open: () => eventBus.emit("ha:dev-tools", { tab: "config" }),
+    });
+
+    try {
+        await saveSettings();
+        operation.update({ message: t('ha_restart.requesting'), percent: 20 });
+        const data = await fetchWithAuth(API_BASE, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "restart_home_assistant" }),
+        });
+        if (!data?.success) {
+            const message = data?.message || data?.error || "Home Assistant rejected the restart request";
+            operation.fail(t('ha_restart.rejected'), message);
+            showToast(t("toast.restart_ha_fail", { error: message }), "error");
+            return false;
+        }
+
+        operation.update({ message: t('ha_restart.waiting'), percent: 45 });
+        const startedAt = Date.now();
+        let observedOffline = false;
+        const waitUntilReady = async () => {
+            try {
+                const version = await fetchWithAuth(`${API_BASE}?action=get_version&_t=${Date.now()}`);
+                if (observedOffline && version) return version;
+            } catch (_error) {
+                observedOffline = true;
+                operation.update({ message: t('ha_restart.restarting'), percent: 70 });
+            }
+            if (Date.now() - startedAt >= 120000) {
+                throw new Error("Home Assistant did not become ready within 2 minutes");
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return waitUntilReady();
+        };
+
+        await waitUntilReady();
+        operation.finish(t('ha_restart.online'), {
+            detail: t('ha_restart.complete_detail'),
+        });
+        setTimeout(() => window.location.reload(), 1000);
+        return true;
+    } catch (error) {
+        operation.fail(t('ha_restart.unconfirmed'), error.message);
+        showToast(t('toast.restart_ha_failed', { error: error.message }), "error");
+        console.error(error);
+        return false;
+    }
+}
+
+function escapeDialogText(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}

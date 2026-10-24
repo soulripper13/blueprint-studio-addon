@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" class="component-showcase-root">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>Blueprint Studio Component Showcase</title>
+  <link rel="preload" href="./fonts/material-icons.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./styles/modules/base.css">
+  <link rel="stylesheet" href="./styles/modules/primitives.css">
+  <link rel="stylesheet" href="./styles/modules/ui-components.css">
+  <link rel="stylesheet" href="./styles/component-showcase.css">
+</head>
+<body class="component-showcase" data-showcase-theme="light">
+  <header class="showcase-header">
+    <div>
+      <h1>Blueprint Studio</h1>
+      <p>Component showcase</p>
+    </div>
+    <div class="ui-segmented-control" role="group" aria-label="Showcase theme">
+      <button class="ui-segmented-control__item" type="button" data-theme-option="light" aria-pressed="true">Light</button>
+      <button class="ui-segmented-control__item" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+    </div>
+  </header>
+
+  <main class="showcase-main">
+    <section class="showcase-section" aria-labelledby="controls-heading">
+      <div class="showcase-section-heading">
+        <h2 id="controls-heading">Controls</h2>
+        <span class="ui-badge">Interactive</span>
+      </div>
+      <div class="showcase-grid showcase-controls-grid">
+        <div class="showcase-specimen">
+          <h3>Buttons</h3>
+          <div class="showcase-row">
+            <button class="ui-button" type="button">Default</button>
+            <button class="ui-button" data-variant="primary" type="button">Save file</button>
+            <button class="ui-button" data-variant="danger" type="button">Delete</button>
+            <button class="ui-button" type="button" disabled>Unavailable</button>
+            <button class="ui-button" type="button" aria-busy="true" disabled>
+              <span class="ui-icon material-icons spinning" aria-hidden="true">progress_activity</span>
+              Saving
+            </button>
+          </div>
+        </div>
+
+        <div class="showcase-specimen">
+          <h3>Icon actions</h3>
+          <div class="showcase-row">
+            <button class="ui-button ui-icon-button ui-tooltip" type="button" aria-label="Save" data-tooltip="Save">
+              <span class="ui-icon material-icons" aria-hidden="true">save</span>
+            </button>
+            <button class="ui-button ui-icon-button ui-tooltip" type="button" aria-label="Search" data-tooltip="Search">
+              <span class="ui-icon material-icons" aria-hidden="true">search</span>
+            </button>
+            <button class="ui-button ui-icon-button ui-tooltip" type="button" aria-label="AI Studio" data-tooltip="AI Studio">
+              <span class="ui-icon material-icons" data-tone="ai" aria-hidden="true">auto_awesome</span>
+            </button>
+            <button class="ui-button ui-icon-button ui-tooltip" type="button" aria-label="Connected" data-tooltip="Connected">
+              <span class="ui-icon material-icons" data-tone="success" aria-hidden="true">cloud_done</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="showcase-specimen">
+          <h3>Fields</h3>
+          <div class="showcase-field-grid">
+            <label>Workspace <input class="ui-input" value="config/automations" aria-label="Workspace"></label>
+            <label>Language
+              <select class="ui-select" aria-label="Language">
+                <option>YAML</option>
+                <option>JSON</option>
+              </select>
+            </label>
+            <label>Unavailable <input class="ui-input" value="Read only" disabled aria-label="Unavailable field"></label>
+          </div>
+        </div>
+
+        <div class="showcase-specimen">
+          <h3>Selection</h3>
+          <div class="showcase-stack">
+            <label class="ui-toggle"><input class="ui-checkbox" type="checkbox" checked> Autocomplete</label>
+            <label class="ui-toggle"><input class="ui-checkbox" type="checkbox"> Show whitespace</label>
+            <div class="ui-segmented-control" role="group" aria-label="Editor mode">
+              <button class="ui-segmented-control__item" type="button" aria-pressed="true">Edit</button>
+              <button class="ui-segmented-control__item" type="button" aria-pressed="false">Preview</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase-section" aria-labelledby="navigation-heading">
+      <div class="showcase-section-heading">
+        <h2 id="navigation-heading">Navigation</h2>
+        <span class="ui-badge">Selected states</span>
+      </div>
+      <div class="showcase-grid showcase-navigation-grid">
+        <div class="showcase-specimen">
+          <h3>Tabs</h3>
+          <div class="ui-tabs" role="tablist" aria-label="Workspace views">
+            <button class="ui-tab" type="button" role="tab" aria-selected="true">Editor</button>
+            <button class="ui-tab" type="button" role="tab" aria-selected="false">Problems <span class="ui-badge">3</span></button>
+            <button class="ui-tab" type="button" role="tab" aria-selected="false">Output</button>
+          </div>
+        </div>
+        <div class="showcase-specimen">
+          <h3>Menu</h3>
+          <div class="ui-menu showcase-menu" role="menu" aria-label="File actions">
+            <div class="ui-menu__item" role="menuitem" tabindex="0"><span class="ui-icon material-icons" aria-hidden="true">edit</span>Rename</div>
+            <div class="ui-menu__item" role="menuitemcheckbox" aria-checked="true" tabindex="-1"><span class="ui-icon material-icons" aria-hidden="true">visibility</span>Show hidden</div>
+            <div class="ui-menu__item" role="menuitem" aria-disabled="true"><span class="ui-icon material-icons" aria-hidden="true">lock</span>Protected action</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase-section" aria-labelledby="feedback-heading">
+      <div class="showcase-section-heading">
+        <h2 id="feedback-heading">Feedback</h2>
+        <div class="showcase-row">
+          <button class="ui-button" id="showcase-notification" type="button">Show notification</button>
+          <button class="ui-button" id="showcase-dialog-trigger" data-variant="primary" type="button">Open dialog</button>
+        </div>
+      </div>
+      <div class="showcase-grid showcase-feedback-grid">
+        <div class="showcase-stack">
+          <div class="ui-alert" data-status="success" role="status"><strong>Saved.</strong> Automation changes are current.</div>
+          <div class="ui-alert" data-status="warning" role="status"><strong>Review needed.</strong> One entity is unavailable.</div>
+          <div class="ui-alert" data-status="error" role="alert"><strong>Validation failed.</strong> Fix line 18 and retry.</div>
+        </div>
+        <div class="showcase-specimen">
+          <h3>Progress</h3>
+          <div class="showcase-stack">
+            <label for="showcase-progress">Uploading blueprint <span>62%</span></label>
+            <progress class="ui-progress" id="showcase-progress" max="100" value="62">62%</progress>
+            <div class="showcase-skeletons" aria-label="Loading file list" role="status">
+              <span class="ui-skeleton"></span>
+              <span class="ui-skeleton showcase-skeleton-short"></span>
+              <span class="ui-skeleton showcase-skeleton-medium"></span>
+            </div>
+          </div>
+        </div>
+        <div class="ui-empty-state showcase-empty-state">
+          <span class="ui-icon material-icons" aria-hidden="true">search_off</span>
+          <strong>No matching files</strong>
+          <span>Try a different file name or clear the filter.</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="ui-toast-region toast-container" id="toast-container" role="region" aria-label="Notifications" aria-live="polite"></div>
+
+  <div class="modal-overlay" id="showcase-dialog-overlay">
+    <div class="ui-dialog modal" role="dialog" aria-modal="true" aria-labelledby="showcase-dialog-title">
+      <div class="ui-dialog__header modal-header">
+        <span class="modal-title" id="showcase-dialog-title">Discard local changes?</span>
+        <button class="modal-close" data-dialog-close type="button" aria-label="Close dialog">
+          <span class="ui-icon material-icons modal-close-icon" aria-hidden="true">close</span>
+        </button>
+      </div>
+      <div class="ui-dialog__body modal-body">
+        The unsaved changes in <strong>kitchen_lights.yaml</strong> will be lost.
+      </div>
+      <div class="ui-dialog__footer modal-footer">
+        <button class="modal-btn secondary" data-dialog-close type="button">Cancel</button>
+        <button class="modal-btn danger" data-dialog-close type="button">Discard</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./modules/component-showcase.js"></script>
+</body>
+</html>
