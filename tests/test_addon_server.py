@@ -81,3 +81,14 @@ class TestAddonServer(AioHTTPTestCase):
         read_ha_resp = await self.client.get("/api?action=read_file&path=/homeassistant/test.yaml")
         self.assertEqual(read_ha_resp.status, 200)
         self.assertIn("key: value", (await read_ha_resp.json()).get("content", ""))
+
+        # 6. Entity metadata test via storage
+        storage_dir = self.tmp_config / ".storage"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        (storage_dir / "core.entity_registry").write_text(
+            '{"data": {"entities": [{"entity_id": "sensor.living_room_temperature", "name": "Living Room Temp", "device_class": "temperature"}]}}'
+        )
+        meta_resp = await self.client.get("/api?action=get_metadata")
+        self.assertEqual(meta_resp.status, 200)
+        meta_data = await meta_resp.json()
+        self.assertTrue(any(e["entity_id"] == "sensor.living_room_temperature" for e in meta_data.get("entities", [])))

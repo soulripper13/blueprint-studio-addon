@@ -229,6 +229,11 @@ class HAMetadataManager:
             return normalize_actions(await async_get_all_descriptions(self.hass))
 
         async def entities():
+            if hasattr(self.hass.states, "async_update_states"):
+                try:
+                    await self.hass.states.async_update_states()
+                except Exception as err:
+                    _LOGGER.debug("async_update_states failed: %s", err)
             platform_map: dict[str, str | None] = {}
             from homeassistant.helpers import entity_registry as er
 

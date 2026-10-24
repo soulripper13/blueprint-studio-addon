@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.7
+
+- Fix Home Assistant entity and action autocomplete in Add-on:
+  - Added live entity state retrieval and service discovery via Supervisor Core API (`SUPERVISOR_TOKEN`).
+  - Added full entity registry, device registry, area registry, floor registry, and label registry storage fallbacks.
+  - Added frontend live state bridge to synchronize with parent Home Assistant iframe.
+
 ## 3.0.6
 
 - Fix Ingress authentication bypass: bypass standalone PWA login prompt when loaded through Home Assistant Ingress so users enter directly into the workspace without a redundant login prompt.

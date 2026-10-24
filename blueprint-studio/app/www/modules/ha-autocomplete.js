@@ -18,22 +18,102 @@ const DEVICE_AUTOMATION_REQUESTS = new Map();
 const RECENT_ACTIONS = [];
 const MAX_RECENT_ACTIONS = 12;
 
+export function syncFromParentHass() {
+  try {
+    if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+      const haElem = window.parent.document?.querySelector("home-assistant");
+      const hass = haElem?.hass;
+      if (hass) {
+        if (hass.states && Object.keys(hass.states).length > 0) {
+          const liveEntities = Object.values(hass.states).map(s => ({
+            id: s.entity_id,
+            entity_id: s.entity_id,
+            name: s.attributes?.friendly_name || s.entity_id,
+            friendly_name: s.attributes?.friendly_name,
+            domain: s.entity_id.split('.')[0],
+            state: s.state,
+            icon: s.attributes?.icon,
+            device_class: s.attributes?.device_class,
+          }));
+          if (liveEntities.length > 0) {
+            HA_ENTITIES = liveEntities;
+          }
+        }
+        if (hass.services && Object.keys(hass.services).length > 0) {
+          const liveServices = [];
+          for (const [domain, services] of Object.entries(hass.services)) {
+            for (const [serviceName, meta] of Object.entries(services)) {
+              liveServices.push({
+                id: `${domain}.${serviceName}`,
+                service: `${domain}.${serviceName}`,
+                domain,
+                name: meta.name || serviceName,
+                description: meta.description || '',
+                target: meta.target,
+                fields: meta.fields || {},
+              });
+            }
+          }
+          if (liveServices.length > 0) {
+            HA_SERVICES = liveServices;
+          }
+        }
+        if (hass.devices && Object.keys(hass.devices).length > 0) {
+          HA_DEVICES = Object.values(hass.devices).map(d => ({
+            id: d.id,
+            name: d.name_by_user || d.name || d.id,
+            manufacturer: d.manufacturer,
+            model: d.model,
+          }));
+        }
+        if (hass.areas && Object.keys(hass.areas).length > 0) {
+          HA_AREAS = Object.values(hass.areas).map(a => ({
+            id: a.area_id || a.id,
+            name: a.name,
+          }));
+        }
+      }
+    }
+  } catch (_e) {
+    // Cross-origin restriction
+  }
+}
+
+// Initial sync attempt
+syncFromParentHass();
+
 export async function loadMetadata({ force = false } = {}) {
+  syncFromParentHass();
   if (metadataRequest && !force) return metadataRequest;
   metadataRequest = Promise.all([
     fetchWithAuth(`${API_BASE}?action=get_metadata`, { method: "GET" }),
     fetchWithAuth(`${API_BASE}?action=get_addons`, { method: "GET" }).catch(() => ({ addons: [] })),
   ]).then(([data, addonData]) => {
       HA_METADATA = data;
-      HA_ENTITIES = Array.isArray(data.entities) ? data.entities : [];
-      HA_SERVICES = Array.isArray(data.actions) ? data.actions : [];
-      HA_DEVICES = Array.isArray(data.devices) ? data.devices : [];
-      HA_AREAS = Array.isArray(data.areas) ? data.areas : [];
+      if (Array.isArray(data.entities) && data.entities.length > 0) {
+        HA_ENTITIES = data.entities;
+      }
+      if (Array.isArray(data.actions) && data.actions.length > 0) {
+        HA_SERVICES = data.actions;
+      }
+      if (Array.isArray(data.devices) && data.devices.length > 0) {
+        HA_DEVICES = data.devices;
+      }
+      if (Array.isArray(data.areas) && data.areas.length > 0) {
+        HA_AREAS = data.areas;
+      }
       HA_LABELS = Array.isArray(data.labels) ? data.labels : [];
       HA_FLOORS = Array.isArray(data.floors) ? data.floors : [];
       HA_ADDONS = Array.isArray(addonData.addons) ? addonData.addons : [];
+
+      if (HA_ENTITIES.length === 0 || HA_SERVICES.length === 0) {
+        syncFromParentHass();
+      }
+
       const failed = Object.keys(data.failures || {});
-      HA_AUTOCOMPLETE_ERROR = failed.length ? `Some Home Assistant metadata is unavailable: ${failed.join(", ")}` : null;
+      HA_AUTOCOMPLETE_ERROR = failed.length && HA_ENTITIES.length === 0
+        ? `Some Home Assistant metadata is unavailable: ${failed.join(", ")}`
+        : null;
       if (HA_AUTOCOMPLETE_ERROR) console.warn(HA_AUTOCOMPLETE_ERROR);
       return data;
     })
@@ -387,6 +467,9 @@ export function homeAssistantHint(editor, options) {
   const entityMatch = !isServiceLine && lineText.match(/([a-z0-9_]+)\.([a-z0-9_]*)$/);
 
   if (entityMatch) {
+    if (HA_ENTITIES.length === 0) {
+      syncFromParentHass();
+    }
     const fullMatch = entityMatch[0];
     const matchStart = cursor.ch - fullMatch.length;
     const matchedEntities = HA_ENTITIES.filter(e => e.entity_id.startsWith(fullMatch));
