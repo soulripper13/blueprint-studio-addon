@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.5
+
+- Add support for user-configurable workspace directory (`home_dir`) in the add-on Configuration tab (`/homeassistant`, `/share`, `/media`, `/ssl`, or any custom project subfolder).
+- Add new wide banner logo (`logo.png`) tailored for the Home Assistant Add-on information page.
+- Add rich `README.md` to the add-on directory for the Home Assistant Add-on information page overview.
+- Add English translation (`translations/en.yaml`) for clean configuration UI labels.
+- Map `/media:rw` in `config.yaml` to allow managing media files.
+
 ## 3.0.4
 
 - Fix Home Assistant configuration directory mapping: correctly prioritize `/homeassistant` mapped by Supervisor `homeassistant_config:rw` with backwards-compatible `/config` symlink.

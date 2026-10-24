@@ -22,10 +22,11 @@ Blueprint Studio is a powerful, integrated workspace for Home Assistant that com
 
 ## Configuration
 
-The add-on works out-of-the-box with default settings. It automatically mounts your Home Assistant `/config` directory with read/write permissions.
+The add-on works out-of-the-box with default settings. You can customize the workspace directory and git branch in the **Configuration** tab.
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `home_dir` | string | `/homeassistant` | The root workspace directory to manage in Blueprint Studio and terminal (`/homeassistant`, `/share`, `/media`, `/ssl`, or any subfolder). |
 | `default_branch` | string | `main` | Default branch used when initializing new Git repositories. |
 
 ## Network & Security

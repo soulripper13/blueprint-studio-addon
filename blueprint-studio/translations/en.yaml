@@ -1,0 +1,7 @@
+configuration:
+  home_dir:
+    name: "Workspace Directory"
+    description: "The directory to manage in Blueprint Studio (e.g. /homeassistant for Core configuration, /share, /media, /ssl, or a subfolder)."
+  default_branch:
+    name: "Default Git Branch"
+    description: "The default branch name used when initializing new Git repositories."

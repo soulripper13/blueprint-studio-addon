@@ -1,6 +1,6 @@
 name: "Blueprint Studio"
 description: "Powerful YAML editor, Blueprint creator, Git workspace, and AI assistant for Home Assistant."
-version: "3.0.4"
+version: "3.0.5"
 slug: "blueprint-studio"
 init: false
 arch:
@@ -20,8 +20,11 @@ homeassistant_api: true
 map:
   - homeassistant_config:rw
   - share:rw
+  - media:rw
   - ssl:ro
 options:
+  home_dir: "/homeassistant"
   default_branch: "main"
 schema:
+  home_dir: "str?"
   default_branch: "str?"

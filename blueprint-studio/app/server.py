@@ -180,18 +180,36 @@ async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Blueprint Studio Standalone Server")
     parser.add_argument("--port", type=int, default=8099, help="Port to listen on")
-    default_dir = "/homeassistant" if os.path.isdir("/homeassistant") else "/config"
     parser.add_argument(
         "--config-dir",
         type=str,
-        default=default_dir,
+        default=None,
         help="Home Assistant config directory",
     )
     parser.add_argument("--data-dir", type=str, default="/data", help="Add-on persisted data directory")
     args = parser.parse_args()
 
-    config_path = Path(args.config_dir).resolve()
     data_path = Path(args.data_dir).resolve()
+
+    # Determine config directory
+    config_dir_str = args.config_dir
+    if not config_dir_str:
+        options_file = data_path / "options.json"
+        if options_file.is_file():
+            try:
+                with open(options_file, encoding="utf-8") as f:
+                    opt = json.load(f)
+                    user_dir = opt.get("home_dir") or opt.get("config_dir")
+                    if user_dir and os.path.isdir(user_dir):
+                        config_dir_str = user_dir
+                        _LOGGER.info("Using configured home_dir from options.json: %s", user_dir)
+            except Exception as err:
+                _LOGGER.warning("Could not read options.json: %s", err)
+
+    if not config_dir_str:
+        config_dir_str = "/homeassistant" if os.path.isdir("/homeassistant") else "/config"
+
+    config_path = Path(config_dir_str).resolve()
 
     if not config_path.is_dir():
         _LOGGER.warning("Config directory %s does not exist, creating it", config_path)
