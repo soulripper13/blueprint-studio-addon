@@ -216,6 +216,12 @@ export class PWAAuth {
    * Initialize authentication for PWA
    */
   async initialize() {
+    // When running inside Home Assistant Ingress (Add-on mode),
+    // authentication is handled natively by the Home Assistant Ingress proxy.
+    if (typeof window.__BS_INGRESS_PATH__ !== 'undefined') {
+      return true;
+    }
+
     // Check if this is an OAuth callback first (before anything else)
     const params = new URLSearchParams(window.location.search);
     if (params.get('auth_callback') === '1') {

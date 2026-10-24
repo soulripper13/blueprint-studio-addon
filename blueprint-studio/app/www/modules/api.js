@@ -23,6 +23,17 @@ if (window.pwaAuth) {
 
 export async function fetchWithAuth(url, options = {}) {
   let headers = { ...options.headers };
+
+  // When running inside Home Assistant Ingress, session authentication is handled
+  // automatically by Home Assistant's Ingress proxy via same-origin cookies.
+  if (typeof window.__BS_INGRESS_PATH__ !== "undefined") {
+    return await fetch(url, {
+      ...options,
+      headers,
+      credentials: "same-origin",
+    });
+  }
+
   let token = null;
   let isHassEnvironment = false;
 

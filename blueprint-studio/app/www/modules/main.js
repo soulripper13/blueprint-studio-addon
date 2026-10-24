@@ -9,46 +9,51 @@ async function initApp() {
     window.state = appMod.state;
     window.elements = appMod.elements;
 
-    const { pwaAuth } = await import('./pwa-auth.js?v=' + _v);
-    window.pwaAuth = pwaAuth;
+    // In Home Assistant Ingress / Add-on mode, authentication is handled natively by Ingress.
+    const isIngress = typeof window.__BS_INGRESS_PATH__ !== 'undefined';
 
-    // Initialize PWA authentication first
-    const authSuccess = await pwaAuth.initialize();
+    if (!isIngress) {
+      const { pwaAuth } = await import('./pwa-auth.js?v=' + _v);
+      window.pwaAuth = pwaAuth;
 
-    if (!authSuccess) {
-      console.error('Authentication failed or cancelled');
-      document.body.innerHTML = `
-        <div style="
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          background: #1e1e1e;
-          color: #fff;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          text-align: center;
-          padding: 20px;
-        ">
-          <div>
-            <h1 style="font-size: 24px; margin-bottom: 10px;">Login Required</h1>
-            <p style="color: #aaa; margin-bottom: 20px;">Please login with your Home Assistant account to continue.</p>
-            <button id="btn-login-ha" style="
-              padding: 12px 24px;
-              background: #0e639c;
-              border: none;
-              border-radius: 6px;
-              color: #fff;
-              cursor: pointer;
-              font-size: 14px;
-              font-weight: 600;
-            ">Login with Home Assistant</button>
+      // Initialize PWA authentication first
+      const authSuccess = await pwaAuth.initialize();
+
+      if (!authSuccess) {
+        console.error('Authentication failed or cancelled');
+        document.body.innerHTML = `
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #1e1e1e;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-align: center;
+            padding: 20px;
+          ">
+            <div>
+              <h1 style="font-size: 24px; margin-bottom: 10px;">Login Required</h1>
+              <p style="color: #aaa; margin-bottom: 20px;">Please login with your Home Assistant account to continue.</p>
+              <button id="btn-login-ha" style="
+                padding: 12px 24px;
+                background: #0e639c;
+                border: none;
+                border-radius: 6px;
+                color: #fff;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+              ">Login with Home Assistant</button>
+            </div>
           </div>
-        </div>
-      `;
-      document.getElementById('btn-login-ha')?.addEventListener('click', () => {
-        pwaAuth.loginWithHA();
-      });
-      return;
+        `;
+        document.getElementById('btn-login-ha')?.addEventListener('click', () => {
+          pwaAuth.loginWithHA();
+        });
+        return;
+      }
     }
 
     // Start the application — dynamic import with cache bust

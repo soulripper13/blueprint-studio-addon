@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.6
+
+- Fix Ingress authentication bypass: bypass standalone PWA login prompt when loaded through Home Assistant Ingress so users enter directly into the workspace without a redundant login prompt.
+
 ## 3.0.5
 
 - Add support for user-configurable workspace directory (`home_dir`) in the add-on Configuration tab (`/homeassistant`, `/share`, `/media`, `/ssl`, or any custom project subfolder).
