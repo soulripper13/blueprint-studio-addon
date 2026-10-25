@@ -43,7 +43,8 @@ class TestAddonServer(AioHTTPTestCase):
         text = await resp.text()
         self.assertIn("window.__BS_INGRESS_PATH__ = '/api/hassio_ingress/TEST_TOKEN';", text)
         self.assertIn(f"window.__BS_VERSION__ = '{VERSION}';", text)
-        self.assertIn("/api/hassio_ingress/TEST_TOKEN/assets/", text)
+        self.assertIn(f"window.__BS_ASSETS_PATH__ = '/api/hassio_ingress/TEST_TOKEN/assets/v{VERSION}';", text)
+        self.assertIn(f"/api/hassio_ingress/TEST_TOKEN/assets/v{VERSION}/", text)
         self.assertIn("typeof window.__BS_INGRESS_PATH__ === 'undefined'", text)
 
     @unittest_run_loop
@@ -191,11 +192,22 @@ class TestAddonServer(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_xterm_static_assets_and_terminal_ticket(self):
-        # 1. Verify xterm static assets are served properly
+        # 1. Verify unversioned and versioned xterm static assets are served properly
         js_resp = await self.client.get("/assets/vendor/xterm/xterm.js")
         self.assertEqual(js_resp.status, 200)
         js_text = await js_resp.text()
         self.assertIn("Terminal", js_text)
+
+        # Versioned asset route
+        v_resp = await self.client.get(f"/assets/v{VERSION}/vendor/xterm/xterm.js")
+        self.assertEqual(v_resp.status, 200)
+        self.assertIn("Terminal", await v_resp.text())
+        self.assertEqual(v_resp.headers.get("Cache-Control"), "no-cache, no-store, must-revalidate")
+
+        # Ingress blueprint_studio path versioned
+        bp_resp = await self.client.get(f"/blueprint_studio/assets/v{VERSION}/vendor/xterm/xterm.js")
+        self.assertEqual(bp_resp.status, 200)
+        self.assertIn("Terminal", await bp_resp.text())
 
         css_resp = await self.client.get("/assets/vendor/xterm/xterm.css")
         self.assertEqual(css_resp.status, 200)

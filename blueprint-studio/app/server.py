@@ -112,7 +112,7 @@ async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
     terminal_view.activate(terminal_manager, tickets)
 
     panel_html_path = APP_DIR / "www" / "panels" / "panel_custom.html"
-    www_dir = APP_DIR / "www"
+    www_dir = (APP_DIR / "www").resolve()
 
     async def serve_index(request: web.Request) -> web.Response:
         """Serve the main Blueprint Studio HTML panel configured for Ingress."""
@@ -123,14 +123,15 @@ async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
         content = panel_html_path.read_text(encoding="utf-8")
         content = content.replace("{{VERSION}}", VERSION)
 
-        # Adapt assets path to Ingress
-        asset_prefix = f"{ingress_path}/assets" if ingress_path else "/assets"
+        # Adapt assets path to Ingress with version prefix to bust browser module caches
+        asset_prefix = f"{ingress_path}/assets/v{VERSION}" if ingress_path else f"/assets/v{VERSION}"
         content = content.replace("/blueprint_studio/assets", asset_prefix)
 
         # Inject Ingress configuration script before </head>
         ingress_script = (
             f"<script>\n"
             f"  window.__BS_INGRESS_PATH__ = '{ingress_path}';\n"
+            f"  window.__BS_ASSETS_PATH__ = '{asset_prefix}';\n"
             f"  window.__BS_VERSION__ = '{VERSION}';\n"
             f"</script>\n"
         )
@@ -140,11 +141,31 @@ async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
             text=content,
             content_type="text/html",
             headers={
-                "Cache-Control": "no-store, max-age=0",
+                "Cache-Control": "no-store, max-age=0, must-revalidate",
                 "Pragma": "no-cache",
                 "Expires": "0",
             },
         )
+
+    async def serve_static_asset(request: web.Request) -> web.StreamResponse:
+        """Serve static assets, stripping version prefix to bypass browser cache."""
+        tail = request.match_info.get("tail", "").lstrip("/")
+        parts = tail.split("/", 1)
+        if parts[0].startswith("v") and any(c.isdigit() for c in parts[0]):
+            tail = parts[1] if len(parts) > 1 else ""
+
+        file_path = (www_dir / tail).resolve()
+        try:
+            if not file_path.is_relative_to(www_dir) or not file_path.is_file():
+                return web.Response(status=404, text="Not Found")
+        except (ValueError, OSError):
+            return web.Response(status=404, text="Not Found")
+
+        response = web.FileResponse(file_path)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     async def handle_api_post(request: web.Request) -> web.Response:
         if "hass_user" not in request:
@@ -182,9 +203,9 @@ async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
         app.router.add_post(f"{prefix}/upload", handle_upload_post)
         app.router.add_get(f"{prefix}/terminal_ws", handle_terminal_ws)
 
-    # Static assets routes
-    app.router.add_static("/assets", str(www_dir))
-    app.router.add_static("/blueprint_studio/assets", str(www_dir))
+    # Static assets routes with version prefix support
+    app.router.add_get("/assets/{tail:.*}", serve_static_asset)
+    app.router.add_get("/blueprint_studio/assets/{tail:.*}", serve_static_asset)
 
     return app
 

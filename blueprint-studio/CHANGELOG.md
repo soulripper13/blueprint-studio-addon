@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.14
+
+- Versioned asset paths and module cache busting:
+  - Configured `server.py` to rewrite asset URLs in `panel_custom.html` to `${ingress_path}/assets/v{VERSION}/...`, busting aggressive browser disk caching of ES modules (`api.js`, `terminal.js`, `constants.js`, etc.).
+  - Implemented dynamic static asset router in `server.py` that strips version prefixes (`/assets/v3.0.14/...` -> `/assets/...`) and serves assets with strict `Cache-Control: no-cache, no-store, must-revalidate` headers.
+  - Updated `constants.js` to initialize `ASSETS_BASE` from `window.__BS_ASSETS_PATH__`, ensuring dynamic module and vendor script loaders automatically resolve to the versioned root.
+  - Completely resolves "still no files" and xterm 404s caused by browsers executing outdated cached ES modules.
+
 ## 3.0.13
 
 - Smart configuration directory auto-detection and cache-busting middleware:
