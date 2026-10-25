@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.11
+
+- Fix terminal library loading and dynamic assets path under Home Assistant Ingress:
+  - Added `ASSETS_BASE` constant adapting dynamic vendor asset paths (`xterm`, `xterm-addon-fit`, `diff_match_patch`, `codemirror/merge`, `acorn`, `prettier`, `pdfjs`) to Ingress route `${_ingress}/assets`.
+  - Fixed xterm CSS and JavaScript resource paths in `terminal.js` which were previously hardcoded to `/blueprint_studio/assets/...`, causing 404 errors and `Failed to load terminal libraries: undefined`.
+  - Fixed `loadScript` in `utils.js` to reject with an informative `Error` instance (`Failed to load script: <url>`) rather than a raw DOM `Event` with undefined message.
+  - Added mock `hass.auth.async_get_user` adapter to `HomeAssistant` class in `core.py` preventing ticket user lookup errors.
+  - Added Ingress proxy `X-Forwarded-Proto`, `X-Forwarded-Host`, and `X-Ingress-Path` origin tolerance to `api_terminal.py`.
+  - Converted `material-icons.woff2` CSS font urls to relative paths.
+
 ## 3.0.10
 
 - Fix file loading and JSON response parsing in Home Assistant Ingress:

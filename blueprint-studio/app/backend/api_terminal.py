@@ -52,9 +52,14 @@ class TerminalWebSocketView(HomeAssistantView):
         hass = request.app["hass"]
 
         origin = request.headers.get("Origin")
-        expected_origin = f"{request.scheme}://{request.host}"
-        if not origin or origin.rstrip("/") != expected_origin:
-            return web.Response(status=403, text="Invalid origin")
+        proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+        host = request.headers.get("X-Forwarded-Host", request.host)
+        expected_origin = f"{proto}://{host}"
+        if origin:
+            origin_host = origin.split("://")[-1].rstrip("/")
+            if origin.rstrip("/") != expected_origin and origin_host != host:
+                if "X-Ingress-Path" not in request.headers:
+                    return web.Response(status=403, text="Invalid origin")
 
         ticket = self.tickets.consume(request.query.get("ticket", ""), {"action": "terminal"})
         if ticket is None:

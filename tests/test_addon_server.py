@@ -187,3 +187,33 @@ class TestAddonServer(AioHTTPTestCase):
         check_data = await check_resp.json()
         self.assertTrue(check_data.get("success"))
         self.assertIn("result", check_data)
+
+    @unittest_run_loop
+    async def test_xterm_static_assets_and_terminal_ticket(self):
+        # 1. Verify xterm static assets are served properly
+        js_resp = await self.client.get("/assets/vendor/xterm/xterm.js")
+        self.assertEqual(js_resp.status, 200)
+        js_text = await js_resp.text()
+        self.assertIn("Terminal", js_text)
+
+        css_resp = await self.client.get("/assets/vendor/xterm/xterm.css")
+        self.assertEqual(css_resp.status, 200)
+
+        # 2. Verify connection ticket issuance for terminal
+        ticket_resp = await self.client.post(
+            "/api",
+            json={"action": "issue_connection_ticket", "ticket_action": "terminal"}
+        )
+        self.assertEqual(ticket_resp.status, 200)
+        ticket_data = await ticket_resp.json()
+        self.assertTrue(ticket_data.get("success"))
+        self.assertIn("ticket", ticket_data)
+        ticket = ticket_data["ticket"]
+
+        # 3. Verify terminal ws accepts the ticket
+        ws = await self.client.ws_connect(
+            f"/api/terminal_ws?ticket={ticket}",
+            headers={"Origin": f"http://{self.client.host}:{self.client.port}"}
+        )
+        self.assertFalse(ws.closed)
+        await ws.close()

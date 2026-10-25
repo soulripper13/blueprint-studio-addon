@@ -3,7 +3,7 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { loadScript } from './utils.js';
-import { API_BASE } from './constants.js';
+import { API_BASE, ASSETS_BASE } from './constants.js';
 import { showToast, showModal, showConfirmDialog } from './ui.js';
 import { saveSettings } from './settings.js';
 import { setOverflowTooltip } from './tooltip.js';
@@ -143,13 +143,13 @@ export async function initTerminal() {
             const link = document.createElement('link');
             link.id = 'xterm-css';
             link.rel = 'stylesheet';
-            link.href = '/blueprint_studio/assets/vendor/xterm/xterm.css';
+            link.href = `${ASSETS_BASE}/vendor/xterm/xterm.css`;
             document.head.appendChild(link);
         }
 
         try {
-            await loadScript('/blueprint_studio/assets/vendor/xterm/xterm.js');
-            await loadScript('/blueprint_studio/assets/vendor/xterm/xterm-addon-fit.js');
+            await loadScript(`${ASSETS_BASE}/vendor/xterm/xterm.js`);
+            await loadScript(`${ASSETS_BASE}/vendor/xterm/xterm-addon-fit.js`);
 
             // Wait a bit and verify Terminal class is available (with retry)
             let retries = 0;
@@ -166,7 +166,8 @@ export async function initTerminal() {
             }
         } catch (e) {
             console.error("Failed to load xterm.js", e);
-            showToast(t('toast.terminal_library_failed', { error: e.message }), "error");
+            const errorMsg = e?.message || (e instanceof Event ? "Resource failed to load (network error/404)" : String(e));
+            showToast(t('toast.terminal_library_failed', { error: errorMsg }), "error");
             initPromise = null;
             return;
         }

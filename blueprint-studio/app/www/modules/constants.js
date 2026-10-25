@@ -4,6 +4,7 @@ const _ingress = (typeof window !== "undefined" && window.__BS_INGRESS_PATH__) |
 export const API_BASE = _ingress ? `${_ingress}/api` : "/api/blueprint_studio";
 export const STREAM_BASE = _ingress ? `${_ingress}/api/stream` : "/api/blueprint_studio/stream";
 export const UPLOAD_BASE = _ingress ? `${_ingress}/api/upload` : "/api/blueprint_studio/upload";
+export const ASSETS_BASE = _ingress ? `${_ingress}/assets` : "/blueprint_studio/assets";
 export const MOBILE_BREAKPOINT = 768;
 export const STORAGE_KEY = "blueprint_studio_settings";
 export const MAX_RECENT_FILES = 10;

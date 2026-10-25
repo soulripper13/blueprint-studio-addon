@@ -187,6 +187,14 @@ class HomeAssistant:
             path=lambda *parts: os.path.join(config_dir, *parts),
         )
         self.data: dict[str, Any] = {}
+        self.auth = SimpleNamespace(
+            async_get_user=lambda uid: asyncio.sleep(0, result=SimpleNamespace(
+                id=uid or "ingress_admin",
+                name="Ingress User",
+                is_admin=True,
+                is_active=True,
+            ))
+        )
         self.states = StateMachine(self)
         self.bus = SimpleNamespace(
             async_fire=lambda event, data=None: None,

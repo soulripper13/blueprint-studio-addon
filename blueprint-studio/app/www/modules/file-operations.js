@@ -1,7 +1,7 @@
 /** FILE-OPERATIONS.JS | Purpose: * Handles all file system operations including creating, deleting, copying, */
 import { state, elements } from './state.js';
 import { fetchWithAuth } from './api.js';
-import { API_BASE } from './constants.js';
+import { API_BASE, ASSETS_BASE } from './constants.js';
 import { showToast, showConfirmDialog } from './ui.js';
 import { loadScript } from './utils.js';
 import { t } from './translations.js';
@@ -669,7 +669,7 @@ async function loadAcorn() {
   if (window.acorn) return; // Already loaded
 
   try {
-    await loadScript("/blueprint_studio/assets/vendor/acorn/acorn.js");
+    await loadScript(`${ASSETS_BASE}/vendor/acorn/acorn.js`);
     /*console.log*/ void("✅ Acorn parser loaded successfully");
   } catch (error) {
     console.error("Failed to load Acorn:", error);
@@ -790,16 +790,16 @@ async function loadPrettier() {
 
   try {
     // Load Prettier standalone
-    await loadScript("/blueprint_studio/assets/vendor/prettier/standalone.js");
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/standalone.js`);
 
     // Load plugins
-    await loadScript("/blueprint_studio/assets/vendor/prettier/babel.js");
-    await loadScript("/blueprint_studio/assets/vendor/prettier/estree.js");
-    await loadScript("/blueprint_studio/assets/vendor/prettier/yaml.js");
-    await loadScript("/blueprint_studio/assets/vendor/prettier/html.js");
-    await loadScript("/blueprint_studio/assets/vendor/prettier/markdown.js");
-    await loadScript("/blueprint_studio/assets/vendor/prettier/postcss.js");
-    await loadScript("/blueprint_studio/assets/vendor/prettier/typescript.js");
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/babel.js`);
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/estree.js`);
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/yaml.js`);
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/html.js`);
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/markdown.js`);
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/postcss.js`);
+    await loadScript(`${ASSETS_BASE}/vendor/prettier/typescript.js`);
 
     // Store plugins for Prettier to use
     window.prettierPlugins = {
