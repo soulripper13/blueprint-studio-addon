@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.17
+
+- Fix continuous file tree reloading:
+  - Excluded volatile runtime files (`home-assistant.log*`, `*.log`, SQLite WAL/SHM `*-wal`, `*-shm`, temporary/swap files) and internal `.storage` churn from file tree snapshot signature calculations.
+  - Snapshot signature now tracks structural presence of directories and files without hashing timestamps (`mtime`) or file sizes of rapidly-updating files.
+  - Eliminated disk `stat()` calls across the entire tree during snapshot checks for near-instantaneous polling performance.
+  - Prevented unnecessary reload on initial snapshot check in `polling.js` when `lastFileTreeSnapshot === null`.
+
 ## 3.0.16
 
 - Fix terminal PTY event loop lifecycle:

@@ -230,3 +230,74 @@ class TestAddonServer(AioHTTPTestCase):
         )
         self.assertFalse(ws.closed)
         await ws.close()
+
+    @unittest_run_loop
+    async def test_tree_snapshot_stability_and_detection(self):
+        # Base snapshot
+        resp1 = await self.client.get("/api?action=get_tree_snapshot")
+        self.assertEqual(resp1.status, 200)
+        data1 = await resp1.json()
+        self.assertTrue(data1.get("success"))
+        sig1 = data1["signature"]
+
+        # 1. Writing / appending to home-assistant.log should NOT change signature
+        ha_log = self.tmp_config / "home-assistant.log"
+        ha_log.write_text("2026-10-25 12:00:00 INFO Initial log line\n")
+        resp_log = await self.client.get("/api?action=get_tree_snapshot")
+        data_log = await resp_log.json()
+        self.assertEqual(data_log["signature"], sig1)
+
+        # More log lines
+        ha_log.write_text("2026-10-25 12:00:01 INFO Second log line\n2026-10-25 12:00:02 INFO Third log line\n")
+        resp_log2 = await self.client.get("/api?action=get_tree_snapshot")
+        self.assertEqual((await resp_log2.json())["signature"], sig1)
+
+        # 2. SQLite WAL/SHM runtime files should NOT change signature
+        db_wal = self.tmp_config / "home-assistant_v2.db-wal"
+        db_wal.write_bytes(b"\x00" * 1024)
+        resp_wal = await self.client.get("/api?action=get_tree_snapshot")
+        self.assertEqual((await resp_wal.json())["signature"], sig1)
+
+        # 3. Modifying existing file content should NOT change file tree signature
+        existing_file = self.tmp_config / "existing.yaml"
+        existing_file.write_text("hello: world\n")
+        # Record signature with existing.yaml present
+        resp_exist = await self.client.get("/api?action=get_tree_snapshot")
+        sig_with_file = (await resp_exist.json())["signature"]
+        self.assertNotEqual(sig_with_file, sig1)  # File was created, signature changed
+
+        # Now edit existing_file content without changing tree structure
+        existing_file.write_text("hello: updated_world\nkey: new_value\n")
+        resp_edit = await self.client.get("/api?action=get_tree_snapshot")
+        self.assertEqual((await resp_edit.json())["signature"], sig_with_file)  # Content changed, but signature didn't!
+
+        # 4. Creating a new file SHOULD change signature
+        new_file = self.tmp_config / "new_automation.yaml"
+        new_file.write_text("alias: New Automation\n")
+        resp_new = await self.client.get("/api?action=get_tree_snapshot")
+        sig_new = (await resp_new.json())["signature"]
+        self.assertNotEqual(sig_new, sig_with_file)
+
+        # 5. Creating a new directory SHOULD change signature
+        new_dir = self.tmp_config / "blueprints" / "automation"
+        new_dir.mkdir(parents=True, exist_ok=True)
+        resp_dir = await self.client.get("/api?action=get_tree_snapshot")
+        sig_dir = (await resp_dir.json())["signature"]
+        self.assertNotEqual(sig_dir, sig_new)
+
+        # 6. Deleting a file SHOULD change signature
+        new_file.unlink()
+        resp_del = await self.client.get("/api?action=get_tree_snapshot")
+        sig_del = (await resp_del.json())["signature"]
+        self.assertNotEqual(sig_del, sig_dir)
+
+        # 7. Internal .storage writes should NOT change signature (even with show_hidden=true)
+        storage_file = self.tmp_config / ".storage" / "core.restore_state"
+        storage_file.parent.mkdir(parents=True, exist_ok=True)
+        storage_file.write_text('{"state": "updated"}')
+        resp_storage = await self.client.get("/api?action=get_tree_snapshot&show_hidden=true")
+        sig_storage1 = (await resp_storage.json())["signature"]
+        storage_file.write_text('{"state": "updated_again_rapidly"}')
+        resp_storage2 = await self.client.get("/api?action=get_tree_snapshot&show_hidden=true")
+        sig_storage2 = (await resp_storage2.json())["signature"]
+        self.assertEqual(sig_storage1, sig_storage2)
