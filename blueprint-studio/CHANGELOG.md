@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.13
+
+- Smart configuration directory auto-detection and cache-busting middleware:
+  - Added smart auto-detection between `/homeassistant` and `/config` in `server.py` and `run.sh`: automatically selects the directory containing `configuration.yaml` or active files, resolving empty workspace folder issues.
+  - Added HTTP `Cache-Control: no-cache, no-store, must-revalidate` middleware in `server.py` for `/assets` and `/api` to prevent browsers from serving stale cached scripts and styles across updates.
+
 ## 3.0.12
 
 - Fix Ingress service worker registration and WebSocket unknown command handling:

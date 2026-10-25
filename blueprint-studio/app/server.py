@@ -54,7 +54,19 @@ class IngressUser:
 
 async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
     """Initialize the aiohttp application with all Blueprint Studio routes."""
-    app = web.Application(client_max_size=1024 * 1024 * 500)  # 500MB upload limit
+    @web.middleware
+    async def cache_control_middleware(request: web.Request, handler):
+        response = await handler(request)
+        if request.path.startswith(("/assets", "/blueprint_studio/assets", "/api")):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+    app = web.Application(
+        client_max_size=1024 * 1024 * 500,  # 500MB upload limit
+        middlewares=[cache_control_middleware],
+    )
 
     hass = HomeAssistant(str(config_dir))
     app["hass"] = hass
@@ -206,8 +218,27 @@ def main() -> None:
             except Exception as err:
                 _LOGGER.warning("Could not read options.json: %s", err)
 
-    if not config_dir_str:
-        config_dir_str = "/homeassistant" if os.path.isdir("/homeassistant") else "/config"
+    def _has_ha_config(d: str) -> bool:
+        return os.path.isfile(os.path.join(d, "configuration.yaml"))
+
+    def _dir_has_files(d: str) -> bool:
+        try:
+            return os.path.isdir(d) and len(os.listdir(d)) > 0
+        except OSError:
+            return False
+
+    # Auto-detect Home Assistant configuration directory if default or not set
+    if not config_dir_str or config_dir_str in ("/homeassistant", "/config"):
+        if _has_ha_config("/homeassistant"):
+            config_dir_str = "/homeassistant"
+        elif _has_ha_config("/config"):
+            config_dir_str = "/config"
+        elif _dir_has_files("/homeassistant"):
+            config_dir_str = "/homeassistant"
+        elif _dir_has_files("/config"):
+            config_dir_str = "/config"
+        else:
+            config_dir_str = "/homeassistant" if os.path.isdir("/homeassistant") else "/config"
 
     config_path = Path(config_dir_str).resolve()
 

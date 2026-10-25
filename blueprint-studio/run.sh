@@ -31,9 +31,17 @@ if [ -f "/data/options.json" ]; then
     fi
 fi
 
-# 2. Fall back to standard Home Assistant directories
-if [ -z "$CONFIG_DIR" ]; then
-    if [ -d "/homeassistant" ]; then
+# 2. Check standard Home Assistant directories for actual configuration files
+if [ -z "$CONFIG_DIR" ] || [ "$CONFIG_DIR" = "/homeassistant" ] || [ "$CONFIG_DIR" = "/config" ]; then
+    if [ -f "/homeassistant/configuration.yaml" ]; then
+        CONFIG_DIR="/homeassistant"
+    elif [ -f "/config/configuration.yaml" ]; then
+        CONFIG_DIR="/config"
+    elif [ -d "/homeassistant" ] && [ "$(ls -A /homeassistant 2>/dev/null)" ]; then
+        CONFIG_DIR="/homeassistant"
+    elif [ -d "/config" ] && [ "$(ls -A /config 2>/dev/null)" ]; then
+        CONFIG_DIR="/config"
+    elif [ -d "/homeassistant" ]; then
         CONFIG_DIR="/homeassistant"
     elif [ -d "/config" ]; then
         CONFIG_DIR="/config"
@@ -44,9 +52,11 @@ if [ -z "$CONFIG_DIR" ]; then
     fi
 fi
 
-# 3. Create backwards-compatibility symlink: /config -> $CONFIG_DIR
+# 3. Create backwards-compatibility symlink between /config and /homeassistant
 if [ ! -e "/config" ]; then
     ln -s "$CONFIG_DIR" /config 2>/dev/null || true
+elif [ "$CONFIG_DIR" = "/config" ] && [ ! -e "/homeassistant" ]; then
+    ln -s /config /homeassistant 2>/dev/null || true
 fi
 
 # 4. Set HOME environment variable for Git and terminal tools
