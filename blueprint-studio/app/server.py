@@ -70,6 +70,11 @@ async def init_app(config_dir: Path, data_dir: Path) -> web.Application:
 
     hass = HomeAssistant(str(config_dir))
     app["hass"] = hass
+
+    async def _bind_runtime_loop(app: web.Application) -> None:
+        hass.loop = asyncio.get_running_loop()
+
+    app.on_startup.append(_bind_runtime_loop)
     store = Store(hass, 2, "blueprint_studio_data")
     data = await store.async_load() or {}
 
@@ -273,8 +278,10 @@ def main() -> None:
     _LOGGER.info("Configuration directory: %s", config_path)
     _LOGGER.info("Data directory: %s", data_path)
 
-    app = asyncio.run(init_app(config_path, data_path))
-    web.run_app(app, port=args.port, host="0.0.0.0")
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    app = loop.run_until_complete(init_app(config_path, data_path))
+    web.run_app(app, port=args.port, host="0.0.0.0", loop=loop)
 
 
 if __name__ == "__main__":

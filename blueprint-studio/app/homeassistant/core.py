@@ -178,9 +178,9 @@ class HomeAssistant:
 
     def __init__(self, config_dir: str = "/homeassistant") -> None:
         try:
-            self.loop = asyncio.get_running_loop()
+            self._loop = asyncio.get_running_loop()
         except RuntimeError:
-            self.loop = asyncio.new_event_loop()
+            self._loop = None
         self.config = SimpleNamespace(
             config_dir=config_dir,
             components=set(),
@@ -203,6 +203,21 @@ class HomeAssistant:
         self.services = SimpleNamespace(
             async_call=self._async_call_service,
         )
+
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        """Return the current running event loop, or active fallback loop."""
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            if self._loop and not self._loop.is_closed():
+                return self._loop
+            self._loop = asyncio.new_event_loop()
+            return self._loop
+
+    @loop.setter
+    def loop(self, val: asyncio.AbstractEventLoop) -> None:
+        self._loop = val
 
     def add_job(self, target: Callable, *args: Any) -> Any:
         """Schedule or run a job on the event loop safely from any thread."""

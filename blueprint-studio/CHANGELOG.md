@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.16
+
+- Fix terminal PTY event loop lifecycle:
+  - Resolved `RuntimeError: Event loop is closed` in `handle_terminal_ws` and `hass.loop.add_reader`.
+  - Replaced `asyncio.run(init_app(...))` in `server.py` with persistent loop execution (`web.run_app(..., loop=loop)`), preventing the initialization loop from closing and leaving stale loop references.
+  - Converted `HomeAssistant.loop` and `TerminalSession.loop` to dynamic properties that resolve to the active `asyncio.get_running_loop()`.
+  - Updated `handle_terminal_ws` in `api_terminal.py` to bind PTY reader callbacks directly to the active running request loop.
+
 ## 3.0.15
 
 - Fix terminal WebSocket connection under Ingress:

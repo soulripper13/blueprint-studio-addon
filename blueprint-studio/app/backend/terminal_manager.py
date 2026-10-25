@@ -105,10 +105,21 @@ class TerminalSession:
     """Own one terminal WebSocket and its current PTY."""
 
     def __init__(self, loop, websocket):
-        self.loop = loop
+        self._loop = loop
         self.websocket = websocket
         self.master_fd = None
         self.pid = None
+
+    @property
+    def loop(self):
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return self._loop
+
+    @loop.setter
+    def loop(self, val):
+        self._loop = val
 
     def set_pty(self, master_fd: int, pid: int) -> None:
         """Track the current PTY after removing any previous one."""
@@ -125,7 +136,7 @@ class TerminalSession:
             return
         try:
             self.loop.remove_reader(master_fd)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RuntimeError):
             pass
         # pid == -1 denotes a Paramiko-backed session, not a child process.
         if pid is not None and pid != -1:
