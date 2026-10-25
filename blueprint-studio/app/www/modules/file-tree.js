@@ -1961,30 +1961,32 @@ export async function loadDirectory(path) {
     if (controller.signal.aborted || directoryRequestSequences.get(path) !== sequence) return;
 
 
-    if (result.error) {
-      console.error(`Failed to load directory ${path}:`, result.error);
+    if (!result || result.error || result.success === false) {
+      console.error(`Failed to load directory ${path}:`, result?.error || result?.message || "Unknown error");
       // Directory no longer exists — clean up stale state
       state.failedDirectories.add(path);
-      state.directoryErrors.set(path, result.error);
+      state.directoryErrors.set(path, result?.error || result?.message || "Unknown error");
       state.loadedDirectories.delete(path);
       return;
     }
 
+    const folders = Array.isArray(result.folders) ? result.folders : [];
+    const files = Array.isArray(result.files) ? result.files : [];
+
     // Cache the loaded directory contents
     state.loadedDirectories.set(path, {
-      folders: result.folders || [],
-      files: result.files || []
+      folders: folders,
+      files: files
     });
     state.failedDirectories.delete(path);
     state.directoryErrors.delete(path);
 
 
     // Update file tree structure (add loaded items)
-    updateFileTreeWithLoadedDirectory(path, result.folders || [], result.files || []);
+    updateFileTreeWithLoadedDirectory(path, folders, files);
 
     // Prefetch child folders in background so expand is instant
-    const childFolders = result.folders || [];
-    for (const folder of childFolders) {
+    for (const folder of folders) {
       const childPath = path ? `${path}/${folder.name}` : folder.name;
       if (!state.loadedDirectories.has(childPath) && !state.loadingDirectories.has(childPath)) {
         const childSequence = (directoryRequestSequences.get(childPath) || 0) + 1;
@@ -1992,12 +1994,14 @@ export async function loadDirectory(path) {
         fetchWithAuth(
           `${API_BASE}?action=list_directory&path=${encodeURIComponent(childPath)}&show_hidden=${state.showHidden}`
         ).then(childResult => {
-          if (childResult && !childResult.error && directoryRequestSequences.get(childPath) === childSequence) {
+          if (childResult && !childResult.error && childResult.success !== false && directoryRequestSequences.get(childPath) === childSequence) {
+            const childFolders = Array.isArray(childResult.folders) ? childResult.folders : [];
+            const childFiles = Array.isArray(childResult.files) ? childResult.files : [];
             state.loadedDirectories.set(childPath, {
-              folders: childResult.folders || [],
-              files: childResult.files || []
+              folders: childFolders,
+              files: childFiles
             });
-            updateFileTreeWithLoadedDirectory(childPath, childResult.folders || [], childResult.files || []);
+            updateFileTreeWithLoadedDirectory(childPath, childFolders, childFiles);
           }
         }).catch(() => {});
       }

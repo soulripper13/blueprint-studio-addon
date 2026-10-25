@@ -520,9 +520,12 @@ export async function loadFiles(force = false) {
 
         const result = await fetchWithAuth(`${API_BASE}?action=list_directory&path=&show_hidden=${state.showHidden}`);
 
-        if (result.error) {
-          throw new Error(result.error);
+        if (result?.error || result?.success === false) {
+          throw new Error(result?.error || result?.message || "Failed to load directory");
         }
+
+        const folders = Array.isArray(result?.folders) ? result.folders : [];
+        const files = Array.isArray(result?.files) ? result.files : [];
 
         // Clear loaded directories cache if forcing refresh
         if (force) {
@@ -531,24 +534,24 @@ export async function loadFiles(force = false) {
 
         // Cache root directory contents
         state.loadedDirectories.set("", {
-          folders: result.folders || [],
-          files: result.files || []
+          folders: folders,
+          files: files
         });
 
         // Build initial file tree (just root level)
         state.fileTree = {};
-        result.folders.forEach(folder => {
+        folders.forEach(folder => {
           state.fileTree[folder.name] = {
             _path: folder.path,
             _childCount: folder.childCount || 0
           };
         });
-        state.fileTree._files = result.files || [];
+        state.fileTree._files = files;
 
         // Store flat lists for backward compatibility
-        state.folders = result.folders || [];
-        state.files = result.files || [];
-        state.allItems = [...result.folders, ...result.files];
+        state.folders = folders;
+        state.files = files;
+        state.allItems = [...folders, ...files];
         state.localTreeViewState = { status: "ready", error: "" };
 
         // Initialize navigation if first load
@@ -563,10 +566,10 @@ export async function loadFiles(force = false) {
             const currentResult = await fetchWithAuth(
               `${API_BASE}?action=list_directory&path=${encodeURIComponent(preservedPath)}&show_hidden=${state.showHidden}`
             );
-            if (!currentResult.error) {
+            if (currentResult && !currentResult.error && currentResult.success !== false) {
               state.loadedDirectories.set(preservedPath, {
-                folders: currentResult.folders || [],
-                files: currentResult.files || []
+                folders: Array.isArray(currentResult.folders) ? currentResult.folders : [],
+                files: Array.isArray(currentResult.files) ? currentResult.files : []
               });
             }
           } catch (e) {
@@ -593,9 +596,10 @@ export async function loadFiles(force = false) {
       const shouldForce = force || state._lastShowHidden !== state.showHidden;
       state._lastShowHidden = state.showHidden;
 
-      const items = await fetchWithAuth(`${API_BASE}?action=list_all&show_hidden=${state.showHidden}&force=${shouldForce}`);
-      state.files = items.filter(item => item.type === "file");
-      state.folders = items.filter(item => item.type === "folder");
+      const rawItems = await fetchWithAuth(`${API_BASE}?action=list_all&show_hidden=${state.showHidden}&force=${shouldForce}`);
+      const items = Array.isArray(rawItems) ? rawItems : [];
+      state.files = items.filter(item => item && item.type === "file");
+      state.folders = items.filter(item => item && item.type === "folder");
       state.allItems = items;
       state.fileTree = buildFileTreeImpl(items);
       state.localTreeViewState = { status: "ready", error: "" };
@@ -615,9 +619,10 @@ export async function loadFiles(force = false) {
         await new Promise(resolve => setTimeout(resolve, 500));
 
         try {
-          const items = await fetchWithAuth(`${API_BASE}?action=list_all&show_hidden=${state.showHidden}&force=true`);
-          state.files = items.filter(item => item.type === "file");
-          state.folders = items.filter(item => item.type === "folder");
+          const rawItems = await fetchWithAuth(`${API_BASE}?action=list_all&show_hidden=${state.showHidden}&force=true`);
+          const items = Array.isArray(rawItems) ? rawItems : [];
+          state.files = items.filter(item => item && item.type === "file");
+          state.folders = items.filter(item => item && item.type === "folder");
           state.allItems = items;
           state.fileTree = buildFileTreeImpl(items);
           state.localTreeViewState = { status: "ready", error: "" };

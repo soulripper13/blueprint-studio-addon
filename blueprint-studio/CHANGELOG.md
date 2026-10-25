@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.10
+
+- Fix file loading and JSON response parsing in Home Assistant Ingress:
+  - Fixed `fetchWithAuth` in `api.js` to properly await and parse `.json()` responses when running inside Ingress. Previously, an early return handed back raw `Response` objects causing `result.folders` to be undefined.
+  - Added defensive guards across `FileCoordinator.js` and `file-tree.js` (`Array.isArray(result?.folders)`, `Array.isArray(result?.files)`) to prevent `TypeError: Cannot read properties of undefined (reading 'forEach')`.
+  - Added safe error and status code verification (`result?.error || result?.success === false`) for directory and file listing requests.
+
 ## 3.0.9
 
 - Comprehensive Home Assistant Core integration and Supervisor compatibility fixes:

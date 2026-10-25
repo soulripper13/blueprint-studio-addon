@@ -23,49 +23,44 @@ if (window.pwaAuth) {
 
 export async function fetchWithAuth(url, options = {}) {
   let headers = { ...options.headers };
+  let token = null;
 
   // When running inside Home Assistant Ingress, session authentication is handled
   // automatically by Home Assistant's Ingress proxy via same-origin cookies.
-  if (typeof window.__BS_INGRESS_PATH__ !== "undefined") {
-    return await fetch(url, {
-      ...options,
-      headers,
-      credentials: "same-origin",
-    });
-  }
+  // Only attempt Bearer token resolution when NOT in Ingress mode.
+  if (typeof window.__BS_INGRESS_PATH__ === "undefined") {
+    let isHassEnvironment = false;
 
-  let token = null;
-  let isHassEnvironment = false;
-
-  // Try Home Assistant auth first (when in iframe)
-  try {
-    if (window.parent && window.parent.hassConnection) {
-      isHassEnvironment = true;
-      const conn = await window.parent.hassConnection;
-      if (conn && conn.auth) {
-          if (conn.auth.expired) {
-              await conn.auth.refreshAccessToken();
-          }
-          token = conn.auth.accessToken;
+    // Try Home Assistant auth first (when in iframe)
+    try {
+      if (window.parent && window.parent.hassConnection) {
+        isHassEnvironment = true;
+        const conn = await window.parent.hassConnection;
+        if (conn && conn.auth) {
+            if (conn.auth.expired) {
+                await conn.auth.refreshAccessToken();
+            }
+            token = conn.auth.accessToken;
+        }
+      }
+    } catch (e) {
+      console.error("❌ Auth Error:", e);
+      if (isHassEnvironment) {
+          console.warn("HA auth failed, trying PWA auth...");
       }
     }
-  } catch (e) {
-    console.error("❌ Auth Error:", e);
-    if (isHassEnvironment) {
-        console.warn("HA auth failed, trying PWA auth...");
-    }
-  }
 
-  // Fallback to PWA auth if HA auth not available
-  if (!token && window.pwaAuth && window.pwaAuth.isAuthenticated()) {
-    const pwaToken = await window.pwaAuth.getToken();
-    if (pwaToken) {
-      token = pwaToken;
+    // Fallback to PWA auth if HA auth not available
+    if (!token && window.pwaAuth && window.pwaAuth.isAuthenticated()) {
+      const pwaToken = await window.pwaAuth.getToken();
+      if (pwaToken) {
+        token = pwaToken;
+      }
     }
-  }
 
-  if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+    }
   }
 
   let response = await fetch(url, {
@@ -74,8 +69,8 @@ export async function fetchWithAuth(url, options = {}) {
     credentials: "same-origin",
   });
 
-  // Try to refresh token on 401
-  if (response.status === 401) {
+  // Try to refresh token on 401 (only in non-Ingress environments)
+  if (response.status === 401 && typeof window.__BS_INGRESS_PATH__ === "undefined") {
       try {
           // Try HA token refresh first
           if (window.parent && window.parent.hassConnection) {
