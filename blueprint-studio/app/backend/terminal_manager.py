@@ -373,13 +373,17 @@ TROUBLESHOOTING:
         # Create PTY pair
         master_fd, slave_fd = pty.openpty()
         
+        cwd = self.hass.config.config_dir
+        if not os.path.isdir(cwd):
+            cwd = "/"
+
         try:
             p = subprocess.Popen(
                 [shell],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
-                cwd=self.hass.config.config_dir,
+                cwd=cwd,
                 env=env,
                 start_new_session=True,
                 close_fds=True

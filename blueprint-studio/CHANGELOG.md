@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.15
+
+- Fix terminal WebSocket connection under Ingress:
+  - Removed internal Docker host vs external domain `Origin` check in `api_terminal.py`. Ingress proxies WebSockets from external domains while container sees internal IP, which previously rejected connections with HTTP 403 Forbidden.
+  - Ticket authorization (`TicketManager`) continues to strictly protect the WebSocket with single-use, 30s tokens scoped to authenticated admin users.
+  - Added safety checks in terminal output forwarder to ensure closed WebSockets do not throw errors or retain active loop readers.
+  - Added fallback directory handling in `terminal_manager.py` PTY spawn.
+
 ## 3.0.14
 
 - Versioned asset paths and module cache busting:

@@ -223,10 +223,10 @@ class TestAddonServer(AioHTTPTestCase):
         self.assertIn("ticket", ticket_data)
         ticket = ticket_data["ticket"]
 
-        # 3. Verify terminal ws accepts the ticket
+        # 3. Verify terminal ws accepts the ticket (including with external Home Assistant Ingress origin)
         ws = await self.client.ws_connect(
             f"/api/terminal_ws?ticket={ticket}",
-            headers={"Origin": f"http://{self.client.host}:{self.client.port}"}
+            headers={"Origin": "https://homeassistant.local"}
         )
         self.assertFalse(ws.closed)
         await ws.close()

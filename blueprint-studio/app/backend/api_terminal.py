@@ -46,21 +46,16 @@ class TerminalWebSocketView(HomeAssistantView):
         self.tickets = None
 
     async def get(self, request: web.Request) -> web.WebSocketResponse:
-        """Validate origin and consume a scoped ticket before upgrading."""
+        """Validate ticket and upgrade to terminal WebSocket."""
         if not self._active or self.terminal is None:
             return web.Response(status=503, text="Blueprint Studio is unavailable")
         hass = request.app["hass"]
 
-        origin = request.headers.get("Origin")
-        proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-        host = request.headers.get("X-Forwarded-Host", request.host)
-        expected_origin = f"{proto}://{host}"
-        if origin:
-            origin_host = origin.split("://")[-1].rstrip("/")
-            if origin.rstrip("/") != expected_origin and origin_host != host:
-                if "X-Ingress-Path" not in request.headers:
-                    return web.Response(status=403, text="Invalid origin")
-
+        # In Home Assistant Ingress and reverse proxy setups, the Origin header is the
+        # external HA domain (e.g. https://ha.domain.com) while the container's Host
+        # is its internal Docker IP (172.30.32.X:8099).
+        # CSRF and authorization are strictly enforced by single-use 30s connection tickets
+        # issued through the authenticated API view.
         ticket = self.tickets.consume(request.query.get("ticket", ""), {"action": "terminal"})
         if ticket is None:
             return web.Response(status=401, text="Invalid or expired ticket")
@@ -124,24 +119,41 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
             data = os.read(master_fd, 1024)
             if data:
                 try:
-                    hass.async_create_task(ws.send_bytes(data))
+                    if not ws.closed:
+                        hass.async_create_task(ws.send_bytes(data))
                 except Exception as e:
                     _LOGGER.warning("Failed to send terminal data to WS: %s", e)
-                    hass.loop.remove_reader(master_fd)
-                    hass.async_create_task(ws.close())
+                    try:
+                        hass.loop.remove_reader(master_fd)
+                    except (ValueError, OSError):
+                        pass
+                    if not ws.closed:
+                        hass.async_create_task(ws.close())
             else:
                 _LOGGER.info("Terminal PTY EOF - shell process has exited")
-                hass.loop.remove_reader(master_fd)
-                hass.async_create_task(ws.close())
+                try:
+                    hass.loop.remove_reader(master_fd)
+                except (ValueError, OSError):
+                    pass
+                if not ws.closed:
+                    hass.async_create_task(ws.close())
         except OSError as e:
             if e.errno != 5:
                 _LOGGER.warning("Terminal PTY Read Error (errno %s): %s", e.errno, e)
-            hass.loop.remove_reader(master_fd)
-            hass.async_create_task(ws.close())
+            try:
+                hass.loop.remove_reader(master_fd)
+            except (ValueError, OSError):
+                pass
+            if not ws.closed:
+                hass.async_create_task(ws.close())
         except Exception as e:
             _LOGGER.error("Unexpected error in terminal reader: %s", e)
-            hass.loop.remove_reader(master_fd)
-            hass.async_create_task(ws.close())
+            try:
+                hass.loop.remove_reader(master_fd)
+            except (ValueError, OSError):
+                pass
+            if not ws.closed:
+                hass.async_create_task(ws.close())
 
     hass.loop.add_reader(master_fd, forward_output)
     try:
