@@ -44,6 +44,7 @@ class TestAddonServer(AioHTTPTestCase):
         self.assertIn("window.__BS_INGRESS_PATH__ = '/api/hassio_ingress/TEST_TOKEN';", text)
         self.assertIn(f"window.__BS_VERSION__ = '{VERSION}';", text)
         self.assertIn("/api/hassio_ingress/TEST_TOKEN/assets/", text)
+        self.assertIn("typeof window.__BS_INGRESS_PATH__ === 'undefined'", text)
 
     @unittest_run_loop
     async def test_file_operations_api(self):

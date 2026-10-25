@@ -1345,8 +1345,8 @@
   </div>
 
       <script>
-        // Service Worker Registration for PWA
-        if ('serviceWorker' in navigator) {
+        // Service Worker Registration for PWA (skip when running inside Home Assistant Ingress)
+        if ('serviceWorker' in navigator && (typeof window.__BS_INGRESS_PATH__ === 'undefined' || !window.__BS_INGRESS_PATH__)) {
           let updateReloadTimer = null;
           let updateNoticeShown = false;
           const canReloadForUpdate = () => {

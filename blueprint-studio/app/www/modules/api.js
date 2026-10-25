@@ -299,13 +299,16 @@ async function _subscribeToUpdates(conn, retries = 0) {
       { type: "blueprint_studio/subscribe_updates" }
     );
   } catch (subError) {
-    // Integration may still be loading — retry a few times
-    if (subError.code === 'unknown_command' && retries < 5) {
-      console.warn(`Blueprint Studio: Backend not ready yet (retry ${retries + 1}/5)...`);
-      setTimeout(() => _subscribeToUpdates(conn, retries + 1), 2000);
+    if (subError?.code === 'unknown_command') {
+      // In Supervisor Add-on mode (or when custom component is not installed in Core),
+      // HA Core WebSocket does not have blueprint_studio/subscribe_updates.
+      // Fall back to polling immediately instead of retrying or throwing an uncaught rejection.
+      console.info("Blueprint Studio: HA Core WebSocket updates not supported in Add-on mode; background polling active.");
+      eventBus.emit('polling:start');
       return;
     }
-    throw subError;
+    console.warn("Blueprint Studio: WebSocket subscription failed:", subError);
+    eventBus.emit('polling:start');
   }
 }
 

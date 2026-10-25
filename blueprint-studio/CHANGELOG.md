@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.12
+
+- Fix Ingress service worker registration and WebSocket unknown command handling:
+  - Guarded PWA Service Worker registration in `panel_custom.html` to skip when running inside Home Assistant Ingress, eliminating the 404 script failure for `/blueprint_studio/service-worker.js`.
+  - Fixed `_subscribeToUpdates` in `api.js` to gracefully fall back to background polling immediately when Home Assistant Core returns `unknown_command` for `blueprint_studio/subscribe_updates` (as expected in Supervisor Add-on mode), removing the 5 retry warnings and unhandled promise rejection.
+
 ## 3.0.11
 
 - Fix terminal library loading and dynamic assets path under Home Assistant Ingress:
