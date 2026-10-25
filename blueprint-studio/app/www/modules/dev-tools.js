@@ -425,6 +425,32 @@ function _initActions(panel) {
     if (allServices.length) return allServices;
     if (HA_SERVICES.length) { allServices = HA_SERVICES; return allServices; }
     try {
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        const haElem = window.parent.document?.querySelector('home-assistant');
+        const hass = haElem?.hass;
+        if (hass?.services && Object.keys(hass.services).length > 0) {
+          const liveServices = [];
+          for (const [domain, services] of Object.entries(hass.services)) {
+            for (const [serviceName, meta] of Object.entries(services)) {
+              liveServices.push({
+                id: `${domain}.${serviceName}`,
+                service: `${domain}.${serviceName}`,
+                domain,
+                name: meta.name || serviceName,
+                description: meta.description || '',
+                target: meta.target,
+                fields: meta.fields || {},
+              });
+            }
+          }
+          if (liveServices.length > 0) {
+            allServices = liveServices;
+            return allServices;
+          }
+        }
+      }
+    } catch (_e) {}
+    try {
       const d = await fetchWithAuth(`${API_BASE}?action=get_metadata`);
       allServices = d.actions || [];
     } catch { allServices = []; }

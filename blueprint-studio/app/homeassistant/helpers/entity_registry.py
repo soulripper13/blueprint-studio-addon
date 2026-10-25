@@ -30,8 +30,11 @@ class EntityRegistry:
                         if eid:
                             self.entities[eid] = SimpleNamespace(
                                 entity_id=eid,
+                                domain=eid.partition(".")[0],
                                 platform=ent.get("platform"),
-                                name=ent.get("name") or ent.get("original_name"),
+                                name=ent.get("name") or ent.get("original_name") or eid,
+                                original_name=ent.get("original_name"),
+                                unique_id=ent.get("unique_id"),
                                 device_id=ent.get("device_id"),
                                 area_id=ent.get("area_id"),
                                 icon=ent.get("icon"),

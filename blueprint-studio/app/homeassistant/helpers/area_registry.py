@@ -30,6 +30,7 @@ class AreaRegistry:
                         if aid:
                             self.areas[aid] = SimpleNamespace(
                                 id=aid,
+                                area_id=aid,
                                 name=item.get("name") or aid,
                                 picture=item.get("picture"),
                                 floor_id=item.get("floor_id"),

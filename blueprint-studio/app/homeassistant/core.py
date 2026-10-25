@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -176,8 +177,13 @@ class HomeAssistant:
     """Minimal standalone HomeAssistant runtime adapter for Supervisor Add-on."""
 
     def __init__(self, config_dir: str = "/homeassistant") -> None:
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
         self.config = SimpleNamespace(
             config_dir=config_dir,
+            components=set(),
             path=lambda *parts: os.path.join(config_dir, *parts),
         )
         self.data: dict[str, Any] = {}
@@ -189,6 +195,43 @@ class HomeAssistant:
         self.services = SimpleNamespace(
             async_call=self._async_call_service,
         )
+
+    def add_job(self, target: Callable, *args: Any) -> Any:
+        """Schedule or run a job on the event loop safely from any thread."""
+        try:
+            loop = self.loop
+            if loop.is_running():
+                if inspect.iscoroutinefunction(target):
+                    return asyncio.run_coroutine_threadsafe(target(*args), loop)
+                return loop.call_soon_threadsafe(target, *args)
+            else:
+                if inspect.iscoroutinefunction(target):
+                    return loop.run_until_complete(target(*args))
+                return target(*args)
+        except Exception as e:
+            _LOGGER.debug("Could not schedule job on loop: %s", e)
+            try:
+                res = target(*args)
+                if asyncio.iscoroutine(res):
+                    return self.async_create_task(res)
+                return res
+            except Exception:
+                pass
+
+    def async_add_job(self, target: Callable, *args: Any) -> Any:
+        """Alias for add_job."""
+        return self.add_job(target, *args)
+
+    def async_create_task(self, target: Any) -> asyncio.Task:
+        """Create a background task on the running loop."""
+        loop = self.loop
+        if loop.is_running():
+            return loop.create_task(target)
+        try:
+            cur_loop = asyncio.get_running_loop()
+            return cur_loop.create_task(target)
+        except RuntimeError:
+            return loop.create_task(target)
 
     async def async_add_executor_job(self, target: Callable, *args: Any) -> Any:
         loop = asyncio.get_running_loop()

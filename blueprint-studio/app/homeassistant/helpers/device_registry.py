@@ -35,6 +35,8 @@ class DeviceRegistry:
                                 manufacturer=dev.get("manufacturer"),
                                 model=dev.get("model"),
                                 area_id=dev.get("area_id"),
+                                identifiers=dev.get("identifiers") or [],
+                                connections=dev.get("connections") or [],
                             )
                     return
                 except Exception as e:

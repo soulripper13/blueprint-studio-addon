@@ -1,6 +1,6 @@
 name: "Blueprint Studio"
 description: "Powerful YAML editor, Blueprint creator, Git workspace, and AI assistant for Home Assistant."
-version: "3.0.8"
+version: "3.0.9"
 slug: "blueprint-studio"
 init: false
 arch:
@@ -17,6 +17,8 @@ panel_icon: "mdi:file-document-edit"
 panel_title: "Blueprint Studio"
 panel_admin: true
 homeassistant_api: true
+hassio_api: true
+hassio_role: "manager"
 map:
   - homeassistant_config:rw
   - share:rw

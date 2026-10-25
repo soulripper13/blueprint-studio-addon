@@ -72,6 +72,21 @@ export function syncFromParentHass() {
             name: a.name,
           }));
         }
+        if (hass.floors && Object.keys(hass.floors).length > 0) {
+          HA_FLOORS = Object.values(hass.floors).map(f => ({
+            id: f.floor_id || f.id,
+            name: f.name,
+            level: f.level,
+          }));
+        }
+        if (hass.labels && Object.keys(hass.labels).length > 0) {
+          HA_LABELS = Object.values(hass.labels).map(l => ({
+            id: l.label_id || l.id,
+            name: l.name,
+            color: l.color,
+            icon: l.icon,
+          }));
+        }
       }
     }
   } catch (_e) {
@@ -155,18 +170,50 @@ export async function loadRegistries() {
 async function loadDeviceAutomations(deviceId) {
   if (!deviceId || DEVICE_AUTOMATIONS.has(deviceId)) return DEVICE_AUTOMATIONS.get(deviceId);
   if (DEVICE_AUTOMATION_REQUESTS.has(deviceId)) return DEVICE_AUTOMATION_REQUESTS.get(deviceId);
-  const request = fetchWithAuth(API_BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "get_device_automations", device_id: deviceId }),
-  }).then(data => {
+
+  const request = (async () => {
+    // 1. Try parent Home Assistant WebSocket if running inside iframe
+    try {
+      if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+        const haElem = window.parent.document?.querySelector("home-assistant");
+        const hass = haElem?.hass;
+        if (hass?.callWS) {
+          const [triggers, conditions, actions] = await Promise.all([
+            hass.callWS({ type: "device_automation/trigger/list", device_id: deviceId }).catch(() => []),
+            hass.callWS({ type: "device_automation/condition/list", device_id: deviceId }).catch(() => []),
+            hass.callWS({ type: "device_automation/action/list", device_id: deviceId }).catch(() => []),
+          ]);
+          const automations = {
+            trigger: Array.isArray(triggers) ? triggers : [],
+            condition: Array.isArray(conditions) ? conditions : [],
+            action: Array.isArray(actions) ? actions : [],
+          };
+          if (automations.trigger.length || automations.condition.length || automations.action.length) {
+            DEVICE_AUTOMATIONS.set(deviceId, automations);
+            return automations;
+          }
+        }
+      }
+    } catch (_e) {
+      // Cross-origin restriction
+    }
+
+    // 2. Query backend API
+    const data = await fetchWithAuth(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "get_device_automations", device_id: deviceId }),
+    });
     const automations = data.automations || { trigger: [], condition: [], action: [] };
     DEVICE_AUTOMATIONS.set(deviceId, automations);
     return automations;
-  }).catch(error => {
-    console.warn(`Failed to load device automations for ${deviceId}`, error);
-    return null;
-  }).finally(() => DEVICE_AUTOMATION_REQUESTS.delete(deviceId));
+  })()
+    .catch(error => {
+      console.warn(`Failed to load device automations for ${deviceId}`, error);
+      return { trigger: [], condition: [], action: [] };
+    })
+    .finally(() => DEVICE_AUTOMATION_REQUESTS.delete(deviceId));
+
   DEVICE_AUTOMATION_REQUESTS.set(deviceId, request);
   return request;
 }

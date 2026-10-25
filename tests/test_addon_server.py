@@ -146,3 +146,44 @@ class TestAddonServer(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         data = await resp.json()
         self.assertTrue(data.get("success"))
+
+    @unittest_run_loop
+    async def test_device_registry_and_device_automations(self):
+        storage_dir = self.tmp_config / ".storage"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        (storage_dir / "core.device_registry").write_text(
+            '{"data": {"devices": [{"id": "dev123", "name": "Smart Switch", "identifiers": [["esphome", "aa:bb:cc:dd"]]}]}}'
+        )
+        resp = await self.client.get("/api?action=get_devices")
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        self.assertTrue(data.get("success"))
+        devices = data.get("devices", [])
+        self.assertTrue(any(d["id"] == "dev123" and d["integration"] == "esphome" for d in devices))
+
+        # Test get_device_automations
+        auto_resp = await self.client.post(
+            "/api",
+            json={"action": "get_device_automations", "device_id": "dev123"}
+        )
+        self.assertEqual(auto_resp.status, 200)
+        auto_data = await auto_resp.json()
+        self.assertTrue(auto_data.get("success"))
+        self.assertIn("automations", auto_data)
+
+    @unittest_run_loop
+    async def test_reload_yaml_and_config_check(self):
+        # 1. Test reload_yaml
+        reload_resp = await self.client.post(
+            "/api",
+            json={"action": "reload_yaml", "domain": "automation"}
+        )
+        self.assertEqual(reload_resp.status, 200)
+        self.assertTrue((await reload_resp.json()).get("success"))
+
+        # 2. Test run_config_check
+        check_resp = await self.client.get("/api?action=run_config_check")
+        self.assertEqual(check_resp.status, 200)
+        check_data = await check_resp.json()
+        self.assertTrue(check_data.get("success"))
+        self.assertIn("result", check_data)

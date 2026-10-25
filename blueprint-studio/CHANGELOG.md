@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.0.9
+
+- Comprehensive Home Assistant Core integration and Supervisor compatibility fixes:
+  - Added `hassio_api: true` and `hassio_role: "manager"` permissions in `config.yaml` to unlock Supervisor system API endpoints.
+  - Added native Configuration Check via Supervisor Core Check (`/core/api/config/core/check_config` and `/core/check`) replacing broken CLI checks.
+  - Added live Home Assistant Core version detection dynamically from `/core/info`.
+  - Added installed add-ons retrieval from Supervisor API (`/addons`).
+  - Added Home Assistant restart support via Supervisor API (`/core/restart`).
+  - Added shims for `homeassistant.components.device_automation`, `conversation`, and `hassio`.
+  - Added `self.loop`, `add_job`, `async_add_job`, and `async_create_task` to `HomeAssistant` class to prevent unhandled loop/scheduling attribute errors.
+  - Fixed `device_registry` identifiers/connections attributes so device listings never crash with `AttributeError`.
+  - Fixed `entity_registry` `domain`, `original_name`, and `unique_id` attributes.
+  - Added full selector definitions to `selector.py` matching Home Assistant standard selectors.
+  - Expanded YAML reloading to support `homeassistant.reload_core_config` and `homeassistant.reload_all`.
+  - Added frontend live sync for `floors`, `labels`, `services`, and WebSocket device triggers/actions.
+
 ## 3.0.8
 
 - Fix entity states and attributes in Developer Tools:

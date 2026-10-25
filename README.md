@@ -3,7 +3,7 @@
 Official Home Assistant Supervisor Add-on repository for [Blueprint Studio](https://github.com/ha-china/blueprint-studio).
 
 [![Home Assistant Ingress](https://img.shields.io/badge/Home%20Assistant-Ingress-blue.svg)](https://www.home-assistant.io)
-[![Version](https://img.shields.io/badge/version-3.0.8-green.svg)](https://github.com/soulripper13/blueprint-studio-addon)
+[![Version](https://img.shields.io/badge/version-3.0.9-green.svg)](https://github.com/soulripper13/blueprint-studio-addon)
 [![Support Development](https://img.shields.io/badge/Support-Development-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/soulripper13)
 [![Support via PayPal](https://img.shields.io/badge/Support-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/SKatoaroo)
 

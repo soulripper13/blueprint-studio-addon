@@ -11,6 +11,7 @@ try:
 except (ImportError, ValueError):
     from const import VERSION
 from .util import json_response
+from homeassistant.core import get_supervisor_token
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -224,8 +225,24 @@ async def ai_get_models(ai_manager, data):
 
 async def restart_home_assistant(hass):
     """Restart Home Assistant."""
-    await hass.services.async_call("homeassistant", "restart")
-    return json_response({"success": True, "message": "Restarting..."})
+    try:
+        await hass.services.async_call("homeassistant", "restart")
+        return json_response({"success": True, "message": "Restarting Home Assistant..."})
+    except Exception as e:
+        _LOGGER.debug("Core restart service call failed, trying supervisor API: %s", e)
+        token = get_supervisor_token()
+        if token:
+            try:
+                import aiohttp
+                timeout = aiohttp.ClientTimeout(total=5)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                    async with session.post("http://supervisor/core/restart", headers=headers) as resp:
+                        if resp.status == 200:
+                            return json_response({"success": True, "message": "Restarting Home Assistant via Supervisor..."})
+            except Exception as se:
+                _LOGGER.warning("Supervisor core restart failed: %s", se)
+        return json_response({"success": False, "message": f"Restart failed: {e}"})
 
 
 async def get_entities(hass, data):
@@ -332,17 +349,33 @@ async def get_version(hass):
     from homeassistant.const import __version__ as ha_version_const
 
     is_haos = False
-    try:
-        is_haos = (
-            "hassio" in getattr(hass.config, "components", set())
-            or "hassio" in hass.data
-        )
-    except Exception as e:
-        _LOGGER.debug("Could not detect HAOS: %s", e)
+    ha_ver = ha_version_const
+    token = get_supervisor_token()
+    if token:
+        try:
+            import aiohttp
+            timeout = aiohttp.ClientTimeout(total=3)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                async with session.get("http://supervisor/core/info", headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        ha_ver = data.get("data", {}).get("version", ha_ver)
+                        is_haos = True
+        except Exception:
+            pass
+    if not is_haos:
+        try:
+            is_haos = (
+                "hassio" in getattr(hass.config, "components", set())
+                or "hassio" in hass.data
+            )
+        except Exception as e:
+            _LOGGER.debug("Could not detect HAOS: %s", e)
 
     return json_response(
         {
-            "ha_version": ha_version_const,
+            "ha_version": ha_ver,
             "integration_version": VERSION,
             "is_haos": is_haos,
         }
@@ -359,19 +392,20 @@ async def get_devices(hass):
 
         dev_reg = dr.async_get(hass)
         devices = []
-        for d in dev_reg.devices:
+        raw_devices = dev_reg.devices.values() if isinstance(dev_reg.devices, dict) else dev_reg.devices
+        for d in raw_devices:
             if isinstance(d, str):
                 d = dev_reg.async_get(d)
             if d is None:
                 continue
-            identifiers = list(d.identifiers) if d.identifiers else []
-            integration = identifiers[0][0] if identifiers else None
+            identifiers = getattr(d, "identifiers", None) or []
+            integration = identifiers[0][0] if identifiers and identifiers[0] else None
             devices.append(
                 {
                     "id": d.id,
-                    "name": d.name_by_user or d.name or d.id,
-                    "manufacturer": d.manufacturer,
-                    "model": d.model,
+                    "name": getattr(d, "name_by_user", None) or getattr(d, "name", None) or d.id,
+                    "manufacturer": getattr(d, "manufacturer", None),
+                    "model": getattr(d, "model", None),
                     "integration": integration,
                 }
             )
@@ -429,23 +463,31 @@ async def get_floors(hass):
 
 async def get_device_automations(hass, data):
     """Return integration-provided automations for one selected device."""
-    from homeassistant.components.device_automation import (
-        DeviceAutomationType,
-        async_get_device_automations,
-    )
-
-    device_id = data["device_id"]
-    result = {}
-    for name, automation_type in (
-        ("trigger", DeviceAutomationType.TRIGGER),
-        ("condition", DeviceAutomationType.CONDITION),
-        ("action", DeviceAutomationType.ACTION),
-    ):
-        automations = await async_get_device_automations(
-            hass, automation_type, [device_id]
+    device_id = data.get("device_id")
+    if not device_id:
+        return json_response({"success": False, "error": "device_id is required"})
+    try:
+        from homeassistant.components.device_automation import (
+            DeviceAutomationType,
+            async_get_device_automations,
         )
-        result[name] = automations.get(device_id, [])
-    return json_response({"success": True, "automations": result})
+
+        result = {}
+        for name, automation_type in (
+            ("trigger", DeviceAutomationType.TRIGGER),
+            ("condition", DeviceAutomationType.CONDITION),
+            ("action", DeviceAutomationType.ACTION),
+        ):
+            automations = await async_get_device_automations(
+                hass, automation_type, [device_id]
+            )
+            result[name] = automations.get(device_id, [])
+        return json_response({"success": True, "automations": result})
+    except Exception as e:
+        _LOGGER.debug("get_device_automations failed: %s", e)
+        return json_response(
+            {"success": True, "automations": {"trigger": [], "condition": [], "action": []}}
+        )
 
 
 async def reload_automations(hass):
@@ -476,8 +518,9 @@ async def reload_yaml(hass, data):
         "schedule": ("schedule", "reload"),
         "template": ("template", "reload"),
         "rest": ("rest", "reload"),
-        "homeassistant": ("homeassistant", "reload_config_entry"),
-        "core": ("homeassistant", "reload_all"),
+        "homeassistant": ("homeassistant", "reload_core_config"),
+        "core": ("homeassistant", "reload_core_config"),
+        "all": ("homeassistant", "reload_all"),
     }
     domain = (data.get("domain") or "").strip().lower()
     if not domain:
@@ -491,6 +534,13 @@ async def reload_yaml(hass, data):
         await hass.services.async_call(entry[0], entry[1])
         return json_response({"success": True, "message": f"{domain} reloaded"})
     except Exception as e:
+        # Fallback for core / homeassistant to reload_all
+        if domain in ("core", "homeassistant"):
+            try:
+                await hass.services.async_call("homeassistant", "reload_all")
+                return json_response({"success": True, "message": f"{domain} reloaded via reload_all"})
+            except Exception:
+                pass
         return json_response({"success": False, "message": str(e)})
 
 
@@ -513,6 +563,27 @@ async def get_themes(hass):
 
 async def get_addons(hass):
     """Return installed Supervisor add-ons (HAOS only)."""
+    token = get_supervisor_token()
+    if token:
+        try:
+            import aiohttp
+            timeout = aiohttp.ClientTimeout(total=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                async with session.get("http://supervisor/addons", headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        addons_list = data.get("data", {}).get("addons", [])
+                        result = []
+                        for addon in addons_list:
+                            slug = addon.get("slug")
+                            name = addon.get("name") or slug
+                            if slug and addon.get("installed") is not False:
+                                result.append({"slug": slug, "name": name})
+                        return json_response({"success": True, "addons": result})
+        except Exception as e:
+            _LOGGER.debug("Supervisor addons list failed: %s", e)
+
     try:
         from homeassistant.components.hassio.coordinator import get_addons_list
 
@@ -520,17 +591,16 @@ async def get_addons(hass):
     except Exception as e:
         _LOGGER.debug("Current Supervisor add-on registry unavailable: %s", e)
         try:
-            hassio = hass.components.hassio
-            if not hassio.is_hassio():
-                return json_response({"success": True, "addons": []})
-            addons = await hassio.async_get_addon_store_info()
-            if isinstance(addons, dict):
-                addons = addons.get("addons", [])
+            hassio = getattr(hass.components, "hassio", None)
+            if hassio and hassio.is_hassio():
+                addons = await hassio.async_get_addon_store_info()
+                if isinstance(addons, dict):
+                    addons = addons.get("addons", [])
+            else:
+                addons = []
         except Exception as legacy_error:
-            _LOGGER.debug(
-                "Legacy Supervisor add-on registry unavailable: %s", legacy_error
-            )
-            return json_response({"success": True, "addons": []})
+            _LOGGER.debug("Legacy Supervisor add-on registry unavailable: %s", legacy_error)
+            addons = []
 
     result = []
     for addon in addons or []:
@@ -688,6 +758,7 @@ async def run_config_check(hass):
     """Run HA config check and return structured results.
 
     Tries (in order):
+    0. Supervisor Core Check REST API (Add-on native)
     1. ``hass --script check_config`` — works in all HA environments.
     2. ``ha core check`` — works on HAOS with the Supervisor CLI.
 
@@ -699,7 +770,67 @@ async def run_config_check(hass):
     import shutil
     import os
 
-    config_dir = hass.config.config_dir
+    config_dir = getattr(hass.config, "config_dir", "/homeassistant")
+    token = get_supervisor_token()
+    if token:
+        try:
+            import aiohttp
+            timeout = aiohttp.ClientTimeout(total=45)
+            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+            # 1. Try Core REST proxy: /core/api/config/core/check_config
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post("http://supervisor/core/api/config/core/check_config", headers=headers) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get("result") == "valid":
+                                return json_response({
+                                    "success": True,
+                                    "result": {
+                                        "success": True,
+                                        "output": "Configuration valid!",
+                                        "errors": [],
+                                    }
+                                })
+                            else:
+                                raw_err = str(data.get("errors") or "Configuration invalid")
+                                parsed = _parse_check_output(raw_err, returncode=1, config_dir=config_dir)
+                                if not parsed.get("errors"):
+                                    parsed["errors"] = [{"file": "configuration.yaml", "line": 1, "message": raw_err}]
+                                parsed["success"] = False
+                                return json_response({"success": True, "result": parsed})
+            except Exception as e:
+                _LOGGER.debug("Core check_config API failed, trying supervisor endpoint: %s", e)
+
+            # 2. Try Supervisor endpoint: /core/check
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post("http://supervisor/core/check", headers=headers) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get("result") == "ok":
+                                return json_response({
+                                    "success": True,
+                                    "result": {
+                                        "success": True,
+                                        "output": "Configuration valid!",
+                                        "errors": [],
+                                    }
+                                })
+                            else:
+                                msg = data.get("message") or "Configuration check failed"
+                                errors_data = data.get("data", {})
+                                raw_err = errors_data.get("errors") if isinstance(errors_data, dict) else str(errors_data)
+                                output_text = f"{msg}\n{raw_err}".strip()
+                                parsed = _parse_check_output(output_text, returncode=1, config_dir=config_dir)
+                                if not parsed.get("errors"):
+                                    parsed["errors"] = [{"file": "configuration.yaml", "line": 1, "message": msg}]
+                                parsed["success"] = False
+                                return json_response({"success": True, "result": parsed})
+            except Exception as e:
+                _LOGGER.debug("Supervisor /core/check failed: %s", e)
+        except Exception as e:
+            _LOGGER.debug("API config check failed: %s", e)
 
     def _run() -> dict:
         # Strategy 1: hass --script check_config
